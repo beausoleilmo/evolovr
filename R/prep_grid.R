@@ -100,7 +100,7 @@ prep_h3_admin <- function(con = NULL, config, res = 10L) {
     # nouvelles lignes. Donc chaque MUS_NM_* se retrouve avec 1 ID de
     # la grille H3
     dplyr::mutate(
-      h3_cell = tidyr::unnest("cells"),
+      h3_cell = dbplyr::sql("unnest(cells)"),
       # Garde colonnes d'indicateur de région (pour la jointure basée sur H3)
       "MUS_NM_MUN",
       "MUS_NM_MRC",
