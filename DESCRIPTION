@@ -9,7 +9,19 @@ Description: Permet de faire l'analyse de données de biodiversité dans le
 License: MIT + file LICENSE
 Imports: 
     DBI,
-    duckdb
+    dbplyr,
+    dplyr,
+    duckdb,
+    glue,
+    httr2,
+    jsonlite,
+    rinat,
+    rlang,
+    sf,
+    stats,
+    tictoc,
+    tidyr,
+    utils
 Encoding: UTF-8
 LazyData: true
 RoxygenNote: 7.3.2
