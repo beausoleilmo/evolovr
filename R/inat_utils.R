@@ -256,8 +256,8 @@ inat_nom_langue <- function(
 
   # Filtrer l'information
   nom_lange <- parsed_df |>
-    dplyr::filter(tolower(.data$lexicon) == lang_filter) |>
-    dplyr::pull(.data$name) |>
+    dplyr::filter(tolower("lexicon") == lang_filter) |>
+    dplyr::pull("name") |>
     stats::na.omit()
 
   # Retourne les résultats

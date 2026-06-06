@@ -69,18 +69,22 @@ prep_h3_admin <- function(con = NULL, config, res = 10L) {
     on.exit(expr = DBI::dbDisconnect(con, shutdown = TRUE))
   }
   # Prépare les données de régions administratives
-  admin_qc_tbl <- dplyr::tbl(
+  admin_qc_tbl <-dplyr::tbl(
     src = con,
-    from = glue::glue_sql("ST_Read({config$admin_shp})", .con = con)
+    from = dbplyr::sql(
+      glue::glue_sql(
+        "SELECT * FROM ST_Read({config$admin_shp})",
+        .con = con)
+    )
   ) |>
     dplyr::select(
-      .data$MUS_NM_MUN,
-      .data$MUS_NM_MRC,
-      .data$MUS_NM_REG,
-      .data$geom) |>
+      "MUS_NM_MUN",
+      "MUS_NM_MRC",
+      "MUS_NM_REG",
+      "geom") |>
     dplyr::mutate(
       # ST_Transform a besoin de extension spatiale de duckdb
-      geom = ST_Transform(.data$geom, 'EPSG:4269', 'EPSG:4326')
+      geom = ST_Transform("geom", 'EPSG:4269', 'EPSG:4326')
     )
 
   # Préparation de la table région admin en trouvant les IDs des polygones
@@ -88,7 +92,7 @@ prep_h3_admin <- function(con = NULL, config, res = 10L) {
   admin_h3_indexed <- admin_qc_tbl |>
     dplyr::mutate(
       # Création d'une 'liste' de cells (liste d'hexagones couvrant le polygone)
-      cells = h3_polygon_wkt_to_cells(ST_AsText(.data$geom), as.integer(res))
+      cells = h3_polygon_wkt_to_cells(ST_AsText("geom"), as.integer(res))
     ) |>
     # Utilisation d'une subquery/transmute pour faire une opération (un peu
     # comme mutate), mais qui ne garde que les colonnes désirées. Avec unnest
@@ -96,11 +100,11 @@ prep_h3_admin <- function(con = NULL, config, res = 10L) {
     # nouvelles lignes. Donc chaque MUS_NM_* se retrouve avec 1 ID de
     # la grille H3
     dplyr::mutate(
-      h3_cell = tidyr::unnest(.data$cells),
+      h3_cell = tidyr::unnest("cells"),
       # Garde colonnes d'indicateur de région (pour la jointure basée sur H3)
-      .data$MUS_NM_MUN,
-      .data$MUS_NM_MRC,
-      .data$MUS_NM_REG,
+      "MUS_NM_MUN",
+      "MUS_NM_MRC",
+      "MUS_NM_REG",
       # Comportement similaire à 'Transmute'
       .keep = "none")
 
