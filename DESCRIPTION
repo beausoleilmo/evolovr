@@ -21,7 +21,6 @@ Imports:
     sf,
     stats,
     tictoc,
-    tidyr,
     utils
 Encoding: UTF-8
 LazyData: true

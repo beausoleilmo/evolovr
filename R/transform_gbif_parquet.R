@@ -88,7 +88,8 @@ transforme_gbif <- function(entree, sortie) {
 
   # Filtrer les fichiers dans 'gb_files' pour exclure 000000 (vide = 0 byte) et
   # fichier commançants par '._'
-  DBI::dbExecute(con, "
+  DBI::dbExecute(con,
+  statement = "
   SET variable gb_files = (
     SELECT list(file)
     FROM glob(getvariable('gb_path_pq') || '/*')
