@@ -92,7 +92,12 @@ prep_h3_admin <- function(con = NULL, config, res = 10L) {
   admin_h3_indexed <- admin_qc_tbl |>
     dplyr::mutate(
       # Création d'une 'liste' de cells (liste d'hexagones couvrant le polygone)
-      cells = h3_polygon_wkt_to_cells(ST_AsText("geom"), as.integer(res))
+      # cells = h3_polygon_wkt_to_cells(ST_AsText("geom"), as.integer(res))
+      cells = dbplyr::sql(
+        glue::glue(
+          "h3_polygon_wkt_to_cells(ST_AsText(geom), {as.integer(res)})"
+          )
+        )
     ) |>
     # Utilisation d'une subquery/transmute pour faire une opération (un peu
     # comme mutate), mais qui ne garde que les colonnes désirées. Avec unnest
