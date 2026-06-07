@@ -84,7 +84,9 @@ prep_h3_admin <- function(con = NULL, config, res = 10L) {
       "geom") |>
     dplyr::mutate(
       # ST_Transform a besoin de extension spatiale de duckdb
-      geom = ST_Transform("geom", 'EPSG:4269', 'EPSG:4326')
+      geom = dbplyr::sql(
+        "ST_Transform(geom, 'EPSG:4269', 'EPSG:4326')"
+        )
     )
 
   # Préparation de la table région admin en trouvant les IDs des polygones
