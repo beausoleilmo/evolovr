@@ -82,12 +82,7 @@ join_gbif_admin <- function(con = NULL, config, res = 10L) {
         "SELECT * FROM read_parquet('{config$out_admin_pq}')"
       )
     )
-  ) # |>
-    # mutate(
-    #   h3_cell_4 = dbplyr::sql(
-    #     glue::glue("h3_cell_to_parent(\"h3_cell\", {as.integer(res)})")
-    #   )
-    # )
+  )
 
 # Lire les données GBIF transformées du fichier original vers parquet
   gb_tbl <- dplyr::tbl(
@@ -103,17 +98,22 @@ join_gbif_admin <- function(con = NULL, config, res = 10L) {
   pipeline <- gb_tbl |>
     # Quelque filtre des données GBIF
     dplyr::filter(
+      # Retirer les espèces avec NA
       !is.na(species),
-      basisOfRecord == "HUMAN_OBSERVATION",
-      countryCode == "CA",
-      stateProvince %in% c("Quebec", "Québec", "Qc") |
-        is.na(stateProvince),
+      basisOfRecord %in% c("HUMAN_OBSERVATION", "MACHINE_OBSERVATION"),
+      # Filtre administratif (pas vraiment besoin puisque nous utilisation
+      # une jointure avec les données spatiales des régions administratives)
+      # countryCode == "CA",
+      # stateProvince %in% c("Quebec", "Québec", "Qc") |
+        # is.na(stateProvince),
+      # Filtre taxonomique
       taxonRank %in% c("SPECIES", "SUBSPECIES", "VARIETY"),
       kingdom %in% c("Chromista", "Fungi", "Plantae", "Animalia"),
+      # Filtre géographique
       coordinateUncertaintyInMeters <= 200 |
         is.na(coordinateUncertaintyInMeters)
     ) |>
-    # Création colon  ne H3
+    # Création colonne H3
     dplyr::mutate(
       # Utilisation de dbplyr::sql pour forcer l'évaluation par DuckDB
       h3_cell = dbplyr::sql(
@@ -126,6 +126,7 @@ join_gbif_admin <- function(con = NULL, config, res = 10L) {
       )
     ) |>
     # Ajout de l'information administrative
+    # --> trouver l'intersection entre X et Y
     dplyr::inner_join(
       admin_h3_idx_precalc,
       by = "h3_cell"
