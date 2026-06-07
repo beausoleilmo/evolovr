@@ -14,7 +14,7 @@ utils::globalVariables(
 # Colonnes qui sont passées dans dplyr
 utils::globalVariables(
   names = c(
-    "species", "basisofRecord",
+    "species", "basisOfRecord",
     "countryCode", "stateProvince",
     "taxonRank", "kingdom",
     "coordinateUncertaintyInMeters", "geometry"

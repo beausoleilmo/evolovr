@@ -88,7 +88,7 @@ prep_h3_admin <- function(con = NULL, config, res = 10L) {
       # ST_Transform a besoin de extension spatiale de duckdb
       geom = dbplyr::sql(
         "ST_Transform(geom, 'EPSG:4269', 'EPSG:4326')"
-        )
+      )
     )
 
   # Préparation de la table région admin en trouvant les IDs des polygones
@@ -100,8 +100,8 @@ prep_h3_admin <- function(con = NULL, config, res = 10L) {
       cells = dbplyr::sql(
         glue::glue(
           "h3_polygon_wkt_to_cells(ST_AsText(geom), {as.integer(res)})"
-          )
         )
+      )
     ) |>
     # Utilisation d'une subquery/transmute pour faire une opération (un peu
     # comme mutate), mais qui ne garde que les colonnes désirées. Avec unnest
@@ -123,7 +123,11 @@ prep_h3_admin <- function(con = NULL, config, res = 10L) {
   message("Exécute la jointure spatiale et exporte en Parquet...")
 
   # Requête SQL
-  raw_dbplyr_query <- DBI::SQL(dbplyr::remote_query(admin_h3_indexed))
+  raw_dbplyr_query <- DBI::SQL(
+    dbplyr::remote_query(
+      x = admin_h3_indexed
+    )
+  )
 
   export_sql <- glue::glue_sql(
     "COPY ({raw_dbplyr_query})
@@ -133,7 +137,9 @@ prep_h3_admin <- function(con = NULL, config, res = 10L) {
   )
 
   tictoc::tic()
-  DBI::dbExecute(con, export_sql)
+  DBI::dbExecute(
+    conn = con,
+    statement = export_sql)
   tictoc::toc()
 
   message(glue("Réussi: Données ici --> {config$out_admin_pq}"))
