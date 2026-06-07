@@ -66,7 +66,7 @@ join_gbif_admin <- function(con = NULL, config, res = 10L) {
 
   # Création du dossier de sortie si manquant
   dir.create(
-    path = dirname(config$out_gbif_pq),
+    path = dirname(path = config$out_gbif_pq),
     showWarnings = FALSE,
     recursive = TRUE)
 
@@ -98,7 +98,8 @@ join_gbif_admin <- function(con = NULL, config, res = 10L) {
       stateprovince %in% c("Quebec", "Québec", "Qc") | is.na(stateprovince),
       taxonrank %in% c("SPECIES", "SUBSPECIES", "VARIETY"),
       kingdom %in% c("Chromista", "Fungi", "Plantae", "Animalia"),
-      coordinateuncertaintyinmeters <= 200 | is.na(coordinateuncertaintyinmeters)
+      coordinateuncertaintyinmeters <= 200 |
+        is.na(coordinateuncertaintyinmeters)
     ) |>
     dplyr::mutate(
       # Utilisation de dbplyr::sql pour forcer l'évaluation par DuckDB
@@ -115,6 +116,7 @@ join_gbif_admin <- function(con = NULL, config, res = 10L) {
 
   # 5. Préparation de la requête d'exportation native
   query_raw <- dbplyr::remote_query(pipeline)
+
   export_sql <- glue::glue(
     "COPY ({query_raw}) ",
     "TO '{config$out_gbif_pq}' ",
@@ -122,14 +124,19 @@ join_gbif_admin <- function(con = NULL, config, res = 10L) {
   )
 
   # 6. Exécution et Chronométrage
-  p <- cli::cli_process_start("Exécution de la jointure H3 et exportation vers Parquet")
+  p <- cli::cli_process_start(
+    "Exécution de la jointure H3 et exportation vers Parquet"
+    )
 
   tictoc::tic()
   DBI::dbExecute(con, export_sql)
   tictoc::toc()
 
   cli::cli_process_done(p)
-  cli::cli_alert_success("Données exportées avec succès à l'emplacement : {.path {config$out_gbif_pq}}")
+  cli::cli_alert_success(
+    "Données exportées avec succès à l'emplacement :
+    {.path {config$out_gbif_pq}}"
+    )
 
   return(invisible(NULL))
 }
