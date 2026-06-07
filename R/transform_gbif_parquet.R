@@ -66,7 +66,9 @@ transforme_gbif <- function(entree, sortie) {
   )
 
   # Initialise la connexion DuckDB (en mémoire)
-  con <- DBI::dbConnect(duckdb::duckdb())
+  con <- DBI::dbConnect(
+    drv = duckdb::duckdb()
+    )
 
   # Assurer la déconnexion et la fermeture propre de la DB en cas d'erreur
   on.exit({
@@ -82,9 +84,16 @@ transforme_gbif <- function(entree, sortie) {
 
   # Définir des variables DuckDB
   # Fichier d'entrée
-  DBI::dbExecute(con, sprintf("SET VARIABLE gb_path_pq = '%s';", entree))
+  DBI::dbExecute(
+    conn = con,
+    statement = glue::glue_sql("SET VARIABLE gb_path_pq = {entree};", .con = con)
+  )
+
   # Fichier de sortie
-  DBI::dbExecute(con, sprintf("SET VARIABLE outpath = '%s';", sortie))
+  DBI::dbExecute(
+    conn = con,
+    statement = glue::glue_sql("SET VARIABLE outpath = {sortie};", .con = con)
+  )
 
   # Filtrer les fichiers dans 'gb_files' pour exclure 000000 (vide = 0 byte) et
   # fichier commançants par '._'
@@ -109,20 +118,80 @@ transforme_gbif <- function(entree, sortie) {
   )
 
   if (is.na(nb_fichiers$total) || nb_fichiers$total == 0) {
-    cli::cli_abort("Aucun fichier valide à traiter dans le répertoire source.")
+    cli::cli_abort(
+      "Aucun fichier valide à traiter dans le répertoire source."
+      )
   }
 
-  # Préparation et exécution de la copie Spatiale
-  DBI::dbExecute(con, "
+  # Dictionnaire de traduction (Format : "nom_origine" = "NomCamelCase")
+  # pour respecter le DarwinCore
+  # Mettez-y uniquement les colonnes qui changent de nom.
+  dwc_mapping <- c(
+    gbifid = "gbifID",
+    datasetkey = "datasetKey",
+    occurrenceid = "occurrenceID",
+    publishingorgkey = "publishingOrgKey",
+    rightsholder = "rightsHolder",
+    lastinterpreted = "lastInterpreted",
+    "\"order\"" = "order", # Échappement propre pour le mot-clé SQL
+    infraspecificepithet = "infraspecificEpithet",
+    taxonrank = "taxonRank",
+    scientificname = "scientificName",
+    verbatimscientificname = "verbatimScientificName",
+    verbatimscientificnameauthorship = "verbatimScientificNameAuthorship",
+    taxonkey = "taxonKey",
+    specieskey = "speciesKey",
+    countrycode = "countryCode",
+    stateprovince = "stateProvince",
+    decimallatitude = "decimalLatitude",
+    decimallongitude = "decimalLongitude",
+    coordinateuncertaintyinmeters = "coordinateUncertaintyInMeters",
+    coordinateprecision = "coordinatePrecision",
+    elevationaccuracy = "elevationAccuracy",
+    depthaccuracy = "depthAccuracy",
+    occurrencestatus = "occurrenceStatus",
+    individualcount = "individualCount",
+    basisofrecord = "basisOfRecord",
+    establishmentmeans = "establishmentMeans",
+    eventdate = "eventDate",
+    institutioncode = "institutionCode",
+    collectioncode = "collectionCode",
+    catalognumber = "catalogNumber",
+    recordnumber = "recordNumber",
+    recordedby = "recordedBy",
+    identifiedby = "identifiedBy",
+    dateidentified = "dateIdentified",
+    typestatus = "typeStatus",
+    mediatype = "mediaType"
+  )
+
+  # Les colonnes qui n'ont pas besoin d'alias 'AS'
+  unchanged_cols <- c("license", "issue", "kingdom", "phylum", "class", "family",
+                      "genus", "species", "locality", "elevation", "depth",
+                      "day", "month", "year")
+
+  # 3. Construire dynamiquement les morceaux du SELECT
+  aliased_fields <- paste(names(dwc_mapping), "AS", dwc_mapping, collapse = ",\n    ")
+  simple_fields <- paste(unchanged_cols, collapse = ",\n    ")
+
+  # Requête SQL avec colonnes renomées
+  sql_query <- glue("
   PREPARE copy_spatial_data AS
   COPY (
     SELECT
-      *,
-      ST_Point(decimalLongitude, decimalLatitude) AS geometry
+      {aliased_fields},
+      {simple_fields},
+      ST_Point(decimallongitude, decimallatitude) AS geometry
     FROM
       read_parquet(getvariable('gb_files'))
   ) TO ? (FORMAT parquet, COMPRESSION 'zstd', COMPRESSION_LEVEL 4);
 ")
+
+  # Préparation et exécution de la copie Spatiale
+  DBI::dbExecute(
+    conn = con,
+  statement = sql_query
+  )
 
   on.exit({
     try(DBI::dbExecute(con, "DEALLOCATE copy_spatial_data;"),

@@ -11,8 +11,12 @@ join_gbif_admin(con = NULL, config, res = 10L)
 \item{con}{Connexion DuckDB valide. Si \code{NULL}, une
 connexion temporaire est initialisée.}
 
-\item{config}{Liste contenant les chemins d'accès : \code{gbif_raw} (entrée),
-\code{out_admin_pq} (référence administrative) et \code{out_gbif_pq} (sortie).}
+\item{config}{Liste avec les chemins d'accès au minimum :
+\itemize{
+\item \code{gbif_raw} : entrée.
+\item \code{out_admin_pq} : référence administrative.
+\item \code{out_gbif_pq} : sortie.
+}}
 
 \item{res}{Integer. Résolution de la grille H3 (ex: \code{10L}).}
 }

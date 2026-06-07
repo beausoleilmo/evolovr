@@ -1,9 +1,11 @@
 #' Ajout des régions admins aux données GBIF
 #' @md
 #' @param con Connection à un pilote \code{duckdb()}
-#' @param config Liste avec les chemins d'accès au minimum
-#' \code{admin_shp} (mis en mémoire avec \code{ST_Read}) et
-#' \code{out_admin_pq} qui exporte un fichier ".parquet"
+#' @param config Liste avec les chemins d'accès au minimum :
+#' \itemize{
+#'   \item \code{admin_shp} : mis en mémoire avec \code{ST_Read}.
+#'   \item \code{out_admin_pq} : qui exporte un fichier ".parquet".
+#' }
 #' @param res "integer": nombre déterminant la résolution H3 e.g., \code{9L}
 #'
 #' @description
@@ -109,9 +111,11 @@ prep_h3_admin <- function(con = NULL, config, res = 10L) {
     dplyr::mutate(
       h3_cell = dbplyr::sql("unnest(cells)"),
       # Garde colonnes d'indicateur de région (pour la jointure basée sur H3)
-      "MUS_NM_MUN",
-      "MUS_NM_MRC",
-      "MUS_NM_REG",
+      dplyr::across(c(
+        "MUS_NM_MUN",
+        "MUS_NM_MRC",
+        "MUS_NM_REG"
+      )),
       # Comportement similaire à 'Transmute'
       .keep = "none")
 

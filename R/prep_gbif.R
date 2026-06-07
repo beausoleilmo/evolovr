@@ -10,8 +10,12 @@
 #'
 #' @param con Connexion DuckDB valide. Si `NULL`, une
 #' connexion temporaire est initialisée.
-#' @param config Liste contenant les chemins d'accès : `gbif_raw` (entrée),
-#'   `out_admin_pq` (référence administrative) et `out_gbif_pq` (sortie).
+#' @param config Liste avec les chemins d'accès au minimum :
+#' \itemize{
+#'   \item \code{gbif_raw} : entrée.
+#'   \item \code{out_admin_pq} : référence administrative.
+#'   \item \code{out_gbif_pq} : sortie.
+#' }
 #' @param res Integer. Résolution de la grille H3 (ex: `10L`).
 #'
 #' @details
@@ -45,7 +49,7 @@
 #' }
 join_gbif_admin <- function(con = NULL, config, res = 10L) {
 
-  # 1. Gestion stricte de la connexion
+  # Gestion de la connexion
   is_local_con <- is.null(con)
   if (is_local_con) {
     con <- evolovr::setup_duckdb()
@@ -55,7 +59,7 @@ join_gbif_admin <- function(con = NULL, config, res = 10L) {
     add = TRUE)
   }
 
-  # 2. Validations des arguments de configuration
+  # Validations des arguments de configuration
   required_paths <- c("out_admin_pq", "gbif_raw", "out_gbif_pq")
   missing_paths <- setdiff(required_paths, names(config))
   if (length(missing_paths) > 0) {
@@ -70,7 +74,7 @@ join_gbif_admin <- function(con = NULL, config, res = 10L) {
     showWarnings = FALSE,
     recursive = TRUE)
 
-  # 3. Connexion aux tables distantes via DuckDB
+  # Connexion aux tables distantes via DuckDB
   admin_h3_idx_precalc <- dplyr::tbl(
     src = con,
     from = dbplyr::sql(
@@ -78,8 +82,14 @@ join_gbif_admin <- function(con = NULL, config, res = 10L) {
         "SELECT * FROM read_parquet('{config$out_admin_pq}')"
       )
     )
-  )
+  ) # |>
+    # mutate(
+    #   h3_cell_4 = dbplyr::sql(
+    #     glue::glue("h3_cell_to_parent(\"h3_cell\", {as.integer(res)})")
+    #   )
+    # )
 
+# Lire les données GBIF transformées du fichier original vers parquet
   gb_tbl <- dplyr::tbl(
     src = con,
     from = dbplyr::sql(
@@ -89,26 +99,33 @@ join_gbif_admin <- function(con = NULL, config, res = 10L) {
     )
   )
 
-  # 4. Pipeline de transformation et filtrage
+  # Pipeline de transformation et filtration des données GBIF
   pipeline <- gb_tbl |>
+    # Quelque filtre des données GBIF
     dplyr::filter(
       !is.na(species),
-      basisofrecord == "HUMAN_OBSERVATION",
-      countrycode == "CA",
-      stateprovince %in% c("Quebec", "Québec", "Qc") | is.na(stateprovince),
-      taxonrank %in% c("SPECIES", "SUBSPECIES", "VARIETY"),
+      basisOfRecord == "HUMAN_OBSERVATION",
+      countryCode == "CA",
+      stateProvince %in% c("Quebec", "Québec", "Qc") |
+        is.na(stateProvince),
+      taxonRank %in% c("SPECIES", "SUBSPECIES", "VARIETY"),
       kingdom %in% c("Chromista", "Fungi", "Plantae", "Animalia"),
-      coordinateuncertaintyinmeters <= 200 |
-        is.na(coordinateuncertaintyinmeters)
+      coordinateUncertaintyInMeters <= 200 |
+        is.na(coordinateUncertaintyInMeters)
     ) |>
+    # Création colon  ne H3
     dplyr::mutate(
       # Utilisation de dbplyr::sql pour forcer l'évaluation par DuckDB
       h3_cell = dbplyr::sql(
         glue::glue(
-          "h3_latlng_to_cell(ST_Y(geometry), ST_X(geometry), {as.integer(res)})"
+          "h3_latlng_to_cell(
+             ST_Y(geometry), ST_X(geometry),
+             {as.integer(res)}
+          )"
         )
       )
     ) |>
+    # Ajout de l'information administrative
     dplyr::inner_join(
       admin_h3_idx_precalc,
       by = "h3_cell"
@@ -118,21 +135,33 @@ join_gbif_admin <- function(con = NULL, config, res = 10L) {
   query_raw <- dbplyr::remote_query(pipeline)
 
   export_sql <- glue::glue(
-    "COPY ({query_raw}) ",
-    "TO '{config$out_gbif_pq}' ",
-    "(FORMAT parquet, COMPRESSION 'zstd', COMPRESSION_LEVEL 4);"
+    "COPY (
+    {query_raw}
+    )
+    TO '{config$out_gbif_pq}' (
+    FORMAT parquet,
+    COMPRESSION 'zstd',
+    COMPRESSION_LEVEL 4
+    );"
   )
 
-  # 6. Exécution et Chronométrage
-  p <- cli::cli_process_start(
+  # Exécution et Chronométrage
+   cli::cli_alert_info(
     "Exécution de la jointure H3 et exportation vers Parquet"
-    )
+                              )
+   # p <- cli::cli_process_start(
+   #   msg = "Exécution de la jointure H3 et exportation vers Parquet\n"
+   #   )
+  # Désactiver la barre de progrès de duckdb pour
+  # prendre le contrôle de ce qui s'affiche dans la console
+  # DBI::dbExecute(con, "SET enable_progress_bar = false;")
 
   tictoc::tic()
   DBI::dbExecute(con, export_sql)
   tictoc::toc()
 
-  cli::cli_process_done(p)
+  # cli::cli_process_done(p)
+
   cli::cli_alert_success(
     "Données exportées avec succès à l'emplacement :
     {.path {config$out_gbif_pq}}"

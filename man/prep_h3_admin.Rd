@@ -9,9 +9,11 @@ prep_h3_admin(con = NULL, config, res = 10L)
 \arguments{
 \item{con}{Connection à un pilote \code{duckdb()}}
 
-\item{config}{Liste avec les chemins d'accès au minimum
-\code{admin_shp} (mis en mémoire avec \code{ST_Read}) et
-\code{out_admin_pq} qui exporte un fichier ".parquet"}
+\item{config}{Liste avec les chemins d'accès au minimum :
+\itemize{
+\item \code{admin_shp} : mis en mémoire avec \code{ST_Read}.
+\item \code{out_admin_pq} : qui exporte un fichier ".parquet".
+}}
 
 \item{res}{"integer": nombre déterminant la résolution H3 e.g., \code{9L}}
 }
