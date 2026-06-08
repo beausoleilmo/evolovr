@@ -14,6 +14,8 @@ utils::globalVariables(
 # Colonnes qui sont passées dans dplyr
 utils::globalVariables(
   names = c(
+    "lexicon",
+    # Données GBIF
     "species", "basisOfRecord",
     "countryCode", "stateProvince",
     "taxonRank", "kingdom",

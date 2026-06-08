@@ -173,19 +173,19 @@ get_inat_taxon_id <- function(scientific_name) {
       warning("Pas de correspondance exacte!")
       no_exact_match = data$results # Fallback to first result
       return(
-
-        list(
-          obs_cnt = no_exact_match$observations_count,
-          name_comm = no_exact_match$preferred_common_name,
-          name_sci = no_exact_match$name,
-          id = no_exact_match$id[1],
-          url = sprintf("https://www.inaturalist.org/taxa/%s", no_exact_match$id),
-          photo_lic = no_exact_match$default_photo$license_code,
-          photo_att = no_exact_match$default_photo$attribution,
-          photo_att_nname = no_exact_match$default_photo$attribution_name,
-          photo_url = no_exact_match$default_photo$medium_url,
-          wiki_url = no_exact_match$wikipedia_url
-        )
+        no_exact_match
+        # list(
+        #   obs_cnt = no_exact_match$observations_count,
+        #   name_comm = no_exact_match$preferred_common_name,
+        #   name_sci = no_exact_match$name,
+        #   id = no_exact_match$id[1],
+        #   url = sprintf("https://www.inaturalist.org/taxa/%s", no_exact_match$id),
+        #   photo_lic = no_exact_match$default_photo$license_code,
+        #   photo_att = no_exact_match$default_photo$attribution,
+        #   photo_att_nname = no_exact_match$default_photo$attribution_name,
+        #   photo_url = no_exact_match$default_photo$medium_url,
+        #   wiki_url = no_exact_match$wikipedia_url
+        # )
       )
     }
   }
@@ -256,7 +256,7 @@ inat_nom_langue <- function(
 
   # Filtrer l'information
   nom_lange <- parsed_df |>
-    dplyr::filter(tolower("lexicon") == lang_filter) |>
+    dplyr::filter(tolower(lexicon) == tolower(lang_filter)) |>
     dplyr::pull("name") |>
     stats::na.omit()
 
