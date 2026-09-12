@@ -1,7 +1,7 @@
 Type: Package
 Package: evolovr
 Title: evolovr : aide l'analyse de données de biodiversité
-Version: 0.1.0
+Version: 0.1.1
 Authors@R: 
     person("Marc-Olivier", "Beausoleil", , "marc-olivier.beausoleil@mail.mcgill.ca", role = c("aut", "cre"))
 Description: Permet de faire l'analyse de données de biodiversité dans le
@@ -24,4 +24,4 @@ Imports:
     utils
 Encoding: UTF-8
 LazyData: true
-RoxygenNote: 7.3.3
+Config/roxygen2/version: 8.1.0

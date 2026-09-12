@@ -14,7 +14,12 @@ more_prec(x)
 Valeur de sortie selon calcul
 }
 \description{
-Retourne valeur d'une fonction (m1 : 1/x, m2 : exponentielle, m3 :  1/x^2)
+Retourne valeur d'une fonction
+m1 : 1/x,
+m2 : exp(-x)
+m3 :  1/x^2)
+ m4 = -log(x)
+ m5 = -sqrt(x)
 }
 \examples{
 more_prec(1:10)

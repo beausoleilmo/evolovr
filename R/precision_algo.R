@@ -3,7 +3,12 @@
 #' @param x Nombre
 #'
 #' @description
-#' Retourne valeur d'une fonction (m1 : 1/x, m2 : exponentielle, m3 :  1/x^2)
+#' Retourne valeur d'une fonction
+#' m1 : 1/x,
+#' m2 : exp(-x)
+#' m3 :  1/x^2)
+#'  m4 = -log(x)
+#'  m5 = -sqrt(x)
 #'
 #' @returns
 #' Valeur de sortie selon calcul
@@ -27,11 +32,15 @@ more_prec <- function(x) {
   m1 <- 2 * x^(-1) / 10 # 2* pour aller plus vite (faster decay)
   m2 <- exp(-x)
   m3 <- (x + 1)^-2
-  # m4 = -log(x)
-  # m5 = -sqrt(x)
+  m4 = -log(x)
+  m5 = -sqrt(x)
+  m6 = .05
   return(list(
     m1 = m1,
     m2 = m2,
-    m3 = m3
+    m3 = m3,
+    m4 = m4,
+    m5 = m5,
+    m6 = m6
   ))
 }
