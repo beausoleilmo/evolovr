@@ -1,30 +1,47 @@
 #' Ajout des régions admins aux données GBIF
-#' @md
-#' @param con Connection à un pilote \code{duckdb()}
-#' @param config Liste avec les chemins d'accès au minimum :
-#' \itemize{
-#'   \item \code{admin_shp} : mis en mémoire avec \code{ST_Read}.
-#'   \item \code{out_admin_pq} : qui exporte un fichier ".parquet".
-#' }
-#' @param res "integer": nombre déterminant la résolution H3 e.g., \code{9L}
 #'
 #' @description
-#' Intersection de polygones administratifs (e.g. municipalités) avec
-#' la grille H3 à fine échelle (e.g., résolution 10L).
+#' Utiliser les polygones des régions administratifs (e.g. municipalités)
+#' pour établir une grille hexagonale H3 à une échelle donnée échelle
+#' (e.g., résolution 10L) qui couvre tous les polygones.
+#' Essentiellement, c'est un tableau des polygones de régions avec les indices
+#' H3 correspondant.
 #'
-#' L'ajout des H3, aux données administratives, crée une grille standardisée
-#' utile pour en faire référence avec des données GBIF
+#' L'ajout des indices H3, aux données administratives, crée une grille
+#' standardisée avec tous les noms de régions associés à H3.
+#' Cette grille
+#' utile pour en faire référence avec des données GBIF.
+#' Pour faire une carte en ligne, .pmtiles serait mieux.
+#'
+#' L'utilisation de duckdb permet de créer un fichier de 43.86 millions de
+#' lignes puis d'exporter directement en parquet et sa compression.
+#' L'exportation en parquet permet d'avoir un fichier de petite taille
+#' (compression), et rapidement (plus que .csv)
+#'
 #' @section Utilisation potentielle :
-#' Permet de faire une grille standardiséee (e.g., H3), mais informée par une
-#' variable spatiale (polygones).
-#' Pour faire de la cartographie de points qui
+#' Attribue un nom de région à une grille standardisée H3.
+#' Pour faire de la cartographie statique de points qui
 #' se présenterait en unité spatiale standardisée.
+#' Cela permet de garder séparer la colonne des informations de région des
+#' données de GBIF. Avant, le code fait tout en même temps. Mais la grille
+#' n'a besoin d'être créé qu'une seule fois. Donc, cette étape a été séparée.
+#'
+#' @md
+#' @param con Connection à un pilote `duckdb()`
+#' @param config Liste avec les chemins d'accès au minimum :
+#' - `admin_shp` : mis en mémoire avec `ST_Read`.
+#' - `out_admin_pq` : qui exporte un fichier ".parquet".
+#' @param res "integer": nombre déterminant la résolution H3 e.g., `9L`
+#' @param colsAdmin (Character) est un vecteur des noms de colonnes à
+#' sélectionner pour les données administrative (rend le jeu de données
+#' plus petit).
+#'
 #'
 #' @details
-#' Connexion à \code{duckdb} et trouver les indices H3 à une résolution \code{res}.
-#' Utiliser \code{transmute} pour garder que les noms '\code{MUS_NM_*}' et
-#' l'indice H3. Copie du fichier selon une préférence
-#' choisie dans le \code{config}.
+#' Connexion à `duckdb` et trouver les indices H3 à une résolution `res`.
+#' Utiliser `transmute` pour garder que les noms '`MUS_NM_*`' et
+#' l'indice H3. Exportation (`COPY`) du fichier selon une préférence
+#' choisie dans le `config`.
 #'
 #' Pour donner un ordre de grandeur :
 #' Resolution: 4,
@@ -41,7 +58,10 @@
 #' la maison symphonique (aire ~16345 m2)
 #'
 #' @returns
-#' Exportation de données \code{out_admin_pq}.
+#' Exportation de données sous forme d'un tableau des colonnes `colsAdmin`
+#' et h3_cell qui est l'indice de l'hexagone du système H3. À résolution
+#' 10L pour la province de Québec,
+#' `out_admin_pq`.
 #'
 #' @export
 #'
@@ -64,30 +84,49 @@
 #'
 #' prep_h3_admin(con, config = paths, res = res)
 #' }
-prep_h3_admin <- function(con = NULL, config, res = 10L) {
-
-  if(is.null(con)) {
-    con = setup_duckdb()
+prep_h3_admin <- function(
+  con = NULL,
+  config,
+  res = 10L,
+  colsAdmin = c(
+    "MUS_NM_MUN",
+    "MUS_NM_MRC",
+    "MUS_NM_REG"
+  )
+) {
+  if (is.null(con)) {
+    con <- setup_duckdb()
     on.exit(expr = DBI::dbDisconnect(con, shutdown = TRUE))
   }
+
+  # Définition de la colonne de géométrie
+  geom_col_name <- "geom"
+  geom_sym <- rlang::sym(geom_col_name)
+  # NOTE :
+  # Colonnes spécifique au jeu de données administratif du Québec
   # Prépare les données de régions administratives
-  admin_qc_tbl <-dplyr::tbl(
+  admin_qc_tbl <- dplyr::tbl(
     src = con,
     from = dbplyr::sql(
       glue::glue_sql(
         "SELECT * FROM ST_Read({config$admin_shp})",
-        .con = con)
+        .con = con
+      )
     )
   ) |>
     dplyr::select(
-      "MUS_NM_MUN",
-      "MUS_NM_MRC",
-      "MUS_NM_REG",
-      "geom") |>
+      dplyr::all_of(colsAdmin),
+      !!geom_sym
+    ) |>
     dplyr::mutate(
       # ST_Transform a besoin de extension spatiale de duckdb
-      geom = dbplyr::sql(
-        "ST_Transform(geom, 'EPSG:4269', 'EPSG:4326')"
+      # la quasiquation (i.e., !!) demande le walrus operator!!
+      !geom_sym := dbplyr::sql(
+        # Remplace le nom de la colonne de géométrie de manière dynamique
+        glue::glue_sql(
+          "ST_Transform({`geom_sym`}, 'EPSG:4269', 'EPSG:4326')",
+          .con = con
+        )
       )
     )
 
@@ -98,8 +137,9 @@ prep_h3_admin <- function(con = NULL, config, res = 10L) {
       # Création d'une 'liste' de cells (liste d'hexagones couvrant le polygone)
       # cells = h3_polygon_wkt_to_cells(ST_AsText("geom"), as.integer(res))
       cells = dbplyr::sql(
-        glue::glue(
-          "h3_polygon_wkt_to_cells(ST_AsText(geom), {as.integer(res)})"
+        glue::glue_sql(
+          "h3_polygon_wkt_to_cells(ST_AsText({`geom_sym`}), {as.integer(res)})",
+          .con = con
         )
       )
     ) |>
@@ -111,16 +151,12 @@ prep_h3_admin <- function(con = NULL, config, res = 10L) {
     dplyr::mutate(
       h3_cell = dbplyr::sql("unnest(cells)"),
       # Garde colonnes d'indicateur de région (pour la jointure basée sur H3)
-      dplyr::across(c(
-        "MUS_NM_MUN",
-        "MUS_NM_MRC",
-        "MUS_NM_REG"
-      )),
+      dplyr::across(
+        dplyr::all_of(colsAdmin)
+      ),
       # Comportement similaire à 'Transmute'
-      .keep = "none")
-
-  # Execute l'exportation
-  message("Exécute la jointure spatiale et exporte en Parquet...")
+      .keep = "none"
+    )
 
   # Requête SQL
   raw_dbplyr_query <- DBI::SQL(
@@ -136,12 +172,20 @@ prep_h3_admin <- function(con = NULL, config, res = 10L) {
     .con = con
   )
 
-  tictoc::tic()
+  # Execute l'exportation
+  message(
+    glue(
+      "Grille : jointure spatiale et exporte en Parquet...
+  Sortie : {config$out_admin_pq}"
+    )
+  )
+
+  tictoc::tic("Calcul de la grille selon les régions administratives")
   DBI::dbExecute(
     conn = con,
-    statement = export_sql)
+    statement = export_sql
+  )
   tictoc::toc()
 
   message(glue("Réussi: Données ici --> {config$out_admin_pq}"))
-
 }

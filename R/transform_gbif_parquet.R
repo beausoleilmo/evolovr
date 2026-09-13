@@ -31,7 +31,7 @@
 #' traité sur le disque.
 #'
 #' @importFrom cli cli_abort cli_warn cli_alert_info
-#' cli_process_start cli_process_done cli_ul cli_li cli_end cli_alert_success
+#'   cli_progress_message cli_ul cli_li cli_end cli_alert_success
 #' @importFrom DBI dbConnect dbIsValid dbDisconnect dbExecute dbGetQuery
 #' @importFrom duckdb duckdb
 #' @importFrom tictoc tic toc
@@ -46,7 +46,6 @@
 #' )
 #' }
 transforme_gbif <- function(entree, sortie) {
-
   # Vérifications
   if (!dir.exists(entree)) {
     cli::cli_abort("Le répertoire d'entrée {.path {entree}} n'existe pas.")
@@ -54,8 +53,8 @@ transforme_gbif <- function(entree, sortie) {
 
   if (!grepl("\\.parquet$", sortie, ignore.case = TRUE)) {
     cli::cli_warn(
-      message =
-        "Le fichier de sortie {.path {sortie}} n'a pas l'extension '.parquet'.")
+      message = "Le fichier de sortie {.path {sortie}} n'a pas l'extension '.parquet'."
+    )
   }
 
   # Création du dossier du fichier de sortie
@@ -68,16 +67,18 @@ transforme_gbif <- function(entree, sortie) {
   # Initialise la connexion DuckDB (en mémoire)
   con <- DBI::dbConnect(
     drv = duckdb::duckdb()
-    )
+  )
 
   # Assurer la déconnexion et la fermeture propre de la DB en cas d'erreur
-  on.exit({
-    if (DBI::dbIsValid(con)) {
-      # Fermer la connexion duckdb
-      DBI::dbDisconnect(con, shutdown = TRUE)
-    }
-  },
-  add = TRUE)
+  on.exit(
+    {
+      if (DBI::dbIsValid(con)) {
+        # Fermer la connexion duckdb
+        DBI::dbDisconnect(con, shutdown = TRUE)
+      }
+    },
+    add = TRUE
+  )
 
   # Installation et chargement d'extension spatiale
   DBI::dbExecute(con, "INSTALL spatial; LOAD spatial;")
@@ -86,7 +87,10 @@ transforme_gbif <- function(entree, sortie) {
   # Fichier d'entrée
   DBI::dbExecute(
     conn = con,
-    statement = glue::glue_sql("SET VARIABLE gb_path_pq = {entree};", .con = con)
+    statement = glue::glue_sql(
+      "SET VARIABLE gb_path_pq = {entree};",
+      .con = con
+    )
   )
 
   # Fichier de sortie
@@ -97,21 +101,24 @@ transforme_gbif <- function(entree, sortie) {
 
   # Filtrer les fichiers dans 'gb_files' pour exclure 000000 (vide = 0 byte) et
   # fichier commançants par '._'
-  DBI::dbExecute(con,
-  statement = "
+  DBI::dbExecute(
+    con,
+    statement = "
   SET variable gb_files = (
     SELECT list(file)
     FROM glob(getvariable('gb_path_pq') || '/*')
     WHERE file NOT LIKE '%/000000'
     AND file NOT LIKE '%/._%'
   );
-")
+"
+  )
 
   # Récupération du nombre de fichiers (length de la liste)
   # Note : 'length()' sur une liste DuckDB retourne le nombre d'éléments.
   nb_fichiers <- DBI::dbGetQuery(
     conn = con,
-    "SELECT length(getvariable('gb_files')) AS total;")
+    "SELECT length(getvariable('gb_files')) AS total;"
+  )
 
   cli::cli_alert_info(
     text = "Nombre de fichiers fragmentés à traiter : {nb_fichiers$total}"
@@ -120,7 +127,7 @@ transforme_gbif <- function(entree, sortie) {
   if (is.na(nb_fichiers$total) || nb_fichiers$total == 0) {
     cli::cli_abort(
       "Aucun fichier valide à traiter dans le répertoire source."
-      )
+    )
   }
 
   # Dictionnaire de traduction (Format : "nom_origine" = "NomCamelCase")
@@ -166,16 +173,35 @@ transforme_gbif <- function(entree, sortie) {
   )
 
   # Les colonnes qui n'ont pas besoin d'alias 'AS'
-  unchanged_cols <- c("license", "issue", "kingdom", "phylum", "class", "family",
-                      "genus", "species", "locality", "elevation", "depth",
-                      "day", "month", "year")
+  unchanged_cols <- c(
+    "license",
+    "issue",
+    "kingdom",
+    "phylum",
+    "class",
+    "family",
+    "genus",
+    "species",
+    "locality",
+    "elevation",
+    "depth",
+    "day",
+    "month",
+    "year"
+  )
 
   # 3. Construire dynamiquement les morceaux du SELECT
-  aliased_fields <- paste(names(dwc_mapping), "AS", dwc_mapping, collapse = ",\n    ")
+  aliased_fields <- paste(
+    names(dwc_mapping),
+    "AS",
+    dwc_mapping,
+    collapse = ",\n    "
+  )
   simple_fields <- paste(unchanged_cols, collapse = ",\n    ")
 
   # Requête SQL avec colonnes renomées
-  sql_query <- glue("
+  sql_query <- glue(
+    "
   PREPARE copy_spatial_data AS
   COPY (
     SELECT
@@ -185,21 +211,23 @@ transforme_gbif <- function(entree, sortie) {
     FROM
       read_parquet(getvariable('gb_files'))
   ) TO ? (FORMAT parquet, COMPRESSION 'zstd', COMPRESSION_LEVEL 4);
-")
+"
+  )
 
   # Préparation et exécution de la copie Spatiale
   DBI::dbExecute(
     conn = con,
-  statement = sql_query
+    statement = sql_query
   )
 
-  on.exit({
-    try(DBI::dbExecute(con, "DEALLOCATE copy_spatial_data;"),
-        silent = TRUE)
-  },
-  add = TRUE)
+  on.exit(
+    {
+      try(DBI::dbExecute(con, "DEALLOCATE copy_spatial_data;"), silent = TRUE)
+    },
+    add = TRUE
+  )
 
-  cli::cli_process_start("Transformation des données GBIF en cours...")
+  cli::cli_progress_message("Transformation des données GBIF en cours...")
   cli::cli_ul()
   cli::cli_li("Source : {.path {entree}}")
   cli::cli_li("Destination : {.path {sortie}}")
@@ -212,15 +240,18 @@ transforme_gbif <- function(entree, sortie) {
     Fichier sortie : %s
     ",
     entree,
-    sortie))
+    sortie
+  ))
 
   tictoc::tic() # 70 s
   DBI::dbExecute(con, "EXECUTE copy_spatial_data(getvariable('outpath'));")
   tictoc::toc()
-  cli_process_done()
+  cli_progress_message("fin")
 
   # Nettoyage de la requête préparée
   DBI::dbExecute(con, "DEALLOCATE copy_spatial_data;")
 
-  cli::cli_alert_success("Le fichier spatial Parquet a été généré avec succès !")
+  cli::cli_alert_success(
+    "Le fichier spatial Parquet a été généré avec succès !"
+  )
 }

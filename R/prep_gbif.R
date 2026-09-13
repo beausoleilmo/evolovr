@@ -33,7 +33,7 @@
 #' @importFrom DBI dbExecute
 #' @importFrom tictoc tic toc
 #' @importFrom cli cli_abort cli_alert_info cli_alert_success
-#' cli_process_start cli_process_done
+#'   cli_progress_message
 #'
 #' @export
 #'
@@ -48,15 +48,16 @@
 #' join_gbif_admin(con, config = paths, res = 10L)
 #' }
 join_gbif_admin <- function(con = NULL, config, res = 10L) {
-
   # Gestion de la connexion
   is_local_con <- is.null(con)
   if (is_local_con) {
     con <- evolovr::setup_duckdb()
-    on.exit({
-      evolovr::discon_duckdb(con)
-    },
-    add = TRUE)
+    on.exit(
+      {
+        evolovr::discon_duckdb(con)
+      },
+      add = TRUE
+    )
   }
 
   # Validations des arguments de configuration
@@ -64,15 +65,17 @@ join_gbif_admin <- function(con = NULL, config, res = 10L) {
   missing_paths <- setdiff(required_paths, names(config))
   if (length(missing_paths) > 0) {
     cli::cli_abort(
-        "Le paramètre {.arg config} requiert les
-        champs manquants suivants : {.val {missing_paths}}")
+      "Le paramètre {.arg config} requiert les
+        champs manquants suivants : {.val {missing_paths}}"
+    )
   }
 
   # Création du dossier de sortie si manquant
   dir.create(
     path = dirname(path = config$out_gbif_pq),
     showWarnings = FALSE,
-    recursive = TRUE)
+    recursive = TRUE
+  )
 
   # Connexion aux tables distantes via DuckDB
   admin_h3_idx_precalc <- dplyr::tbl(
@@ -84,7 +87,7 @@ join_gbif_admin <- function(con = NULL, config, res = 10L) {
     )
   )
 
-# Lire les données GBIF transformées du fichier original vers parquet
+  # Lire les données GBIF transformées du fichier original vers parquet
   gb_tbl <- dplyr::tbl(
     src = con,
     from = dbplyr::sql(
@@ -105,7 +108,7 @@ join_gbif_admin <- function(con = NULL, config, res = 10L) {
       # une jointure avec les données spatiales des régions administratives)
       # countryCode == "CA",
       # stateProvince %in% c("Quebec", "Québec", "Qc") |
-        # is.na(stateProvince),
+      # is.na(stateProvince),
       # Filtre taxonomique
       taxonRank %in% c("SPECIES", "SUBSPECIES", "VARIETY"),
       kingdom %in% c("Chromista", "Fungi", "Plantae", "Animalia"),
@@ -147,12 +150,12 @@ join_gbif_admin <- function(con = NULL, config, res = 10L) {
   )
 
   # Exécution et Chronométrage
-   cli::cli_alert_info(
+  cli::cli_alert_info(
     "Exécution de la jointure H3 et exportation vers Parquet"
-                              )
-   # p <- cli::cli_process_start(
-   #   msg = "Exécution de la jointure H3 et exportation vers Parquet\n"
-   #   )
+  )
+  # p <- cli::cli_progress_message(
+  #   msg = "Exécution de la jointure H3 et exportation vers Parquet\n"
+  #   )
   # Désactiver la barre de progrès de duckdb pour
   # prendre le contrôle de ce qui s'affiche dans la console
   # DBI::dbExecute(con, "SET enable_progress_bar = false;")
@@ -161,12 +164,10 @@ join_gbif_admin <- function(con = NULL, config, res = 10L) {
   DBI::dbExecute(con, export_sql)
   tictoc::toc()
 
-  # cli::cli_process_done(p)
-
   cli::cli_alert_success(
     "Données exportées avec succès à l'emplacement :
     {.path {config$out_gbif_pq}}"
-    )
+  )
 
   return(invisible(NULL))
 }

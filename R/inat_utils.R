@@ -77,15 +77,15 @@
 #' }
 iNatTry <- function(nom_latin, ..., verbose = TRUE) {
   # Obtenir l'ID d'une espèce en fonction du nom latin
-  sp_id = get_inat_taxon_id(nom_latin)$id
+  sp_id <- get_inat_taxon_id(nom_latin)$id
 
   # Tentative de connection
   tryCatch(
     {
       # Extraction du tableau d'observation iNaturalist pour
       # une espèce à partir de l'ID
-      sp_obs_tab_cc0 = rinat::get_inat_obs(
-        taxon_name  = nom_latin,
+      sp_obs_tab_cc0 <- rinat::get_inat_obs(
+        taxon_name = nom_latin,
         taxon_id = sp_id,
         ...
       )
@@ -128,23 +128,26 @@ iNatTry <- function(nom_latin, ..., verbose = TRUE) {
 #' @examples
 #' get_inat_taxon_id(scientific_name = "Poecile atricapillus")
 get_inat_taxon_id <- function(scientific_name) {
-
   # Nécessite certain progiciels en mémoire
-  if (!requireNamespace("httr2", quietly = TRUE)) stop("Package 'httr2' needed.")
-  if (!requireNamespace("jsonlite", quietly = TRUE)) stop("Package 'jsonlite' needed.")
+  if (!requireNamespace("httr2", quietly = TRUE)) {
+    stop("Package 'httr2' needed.")
+  }
+  if (!requireNamespace("jsonlite", quietly = TRUE)) {
+    stop("Package 'jsonlite' needed.")
+  }
 
   # Variables pour l'URL de l'API iNaturalist
   # Construire l'URL pour une
-  API_URL = "https://api.inaturalist.org/v1/"
+  API_URL <- "https://api.inaturalist.org/v1/"
   # Recherche par taxon (espèce)
-  API_taxa = paste0(API_URL, "taxa")
+  API_taxa <- paste0(API_URL, "taxa")
 
   # Niveau taxonomique de la recherche
-  niveau_taxonomique = "species"
+  niveau_taxonomique <- "species"
   # Pages à retourner de l'API
-  pagination = "200"
+  pagination <- "200"
   # Espèce avec nom active (pas renoomé, regroupé dans un autre taxon)
-  taxon_active = "true"
+  taxon_active <- "true"
 
   req <- httr2::request(
     base_url = API_taxa
@@ -171,7 +174,7 @@ get_inat_taxon_id <- function(scientific_name) {
       )
     } else {
       warning("Pas de correspondance exacte!")
-      no_exact_match = data$results # Fallback to first result
+      no_exact_match <- data$results # Fallback to first result
       return(
         no_exact_match
         # list(
@@ -196,7 +199,6 @@ get_inat_taxon_id <- function(scientific_name) {
 }
 
 
-
 #' Obtenir le nom français d'un taxon depuis l'API d'iNaturalist
 #'
 #' @param taxon_id Integer. ID d'un taxon iNaturalist.
@@ -207,7 +209,7 @@ get_inat_taxon_id <- function(scientific_name) {
 #' Si multiple noms retournés, les mots sont séparés par des "\code{;}"
 #' @export
 #' @importFrom httr2 request req_url_query resp_header
-#' req_headers req_retry req_perform resp_body_json
+#'   req_headers req_retry req_perform resp_body_json
 #' @importFrom jsonlite fromJSON
 #' @importFrom dplyr as_tibble filter pull
 #' @importFrom rlang .data
@@ -217,14 +219,22 @@ get_inat_taxon_id <- function(scientific_name) {
 #' inat_nom_langue(64968) # Crapaud
 #' inat_nom_langue(522193) # Orignal, exemple avec \code{;}
 inat_nom_langue <- function(
-    taxon_id, collapse_char = ";", lang_filter = "french") {
-  if (!requireNamespace("httr2", quietly = TRUE)) stop("'httr2' requis.")
-  if (!requireNamespace("jsonlite", quietly = TRUE)) stop("'jsonlite' requis.")
+  taxon_id,
+  collapse_char = ";",
+  lang_filter = "french"
+) {
+  if (!requireNamespace("httr2", quietly = TRUE)) {
+    stop("'httr2' requis.")
+  }
+  if (!requireNamespace("jsonlite", quietly = TRUE)) {
+    stop("'jsonlite' requis.")
+  }
 
-  base_url = "https://www.inaturalist.org/taxon_names.json"
+  base_url <- "https://www.inaturalist.org/taxon_names.json"
 
   req <- httr2::request(
-    base_url = base_url) |>
+    base_url = base_url
+  ) |>
     httr2::req_url_query(
       taxon_id = taxon_id,
       per_page = 200
@@ -252,7 +262,9 @@ inat_nom_langue <- function(
     dplyr::as_tibble()
 
   # Si pas de données
-  if (nrow(parsed_df) == 0) return(NA_character_)
+  if (nrow(parsed_df) == 0) {
+    return(NA_character_)
+  }
 
   # Filtrer l'information
   nom_lange <- parsed_df |>
@@ -266,7 +278,6 @@ inat_nom_langue <- function(
   } else {
     return(paste0(nom_lange, collapse = collapse_char))
   }
-
 }
 
 
@@ -311,7 +322,7 @@ get_try_taxon_name <- function(taxon_id, lang = "french", attend) {
           lang_filter = "french"
         )
 
-        success <- TRUE  # Si on arrive ici, c'est qu'on a réussi!
+        success <- TRUE # Si on arrive ici, c'est qu'on a réussi!
         res # Retourne le résultat
       },
       error = function(cond) {
@@ -366,7 +377,7 @@ get_taxon_info <- function(nom_latin, attend) {
           scientific_name = nom_latin
         )
 
-        success <- TRUE  # Si on arrive ici, c'est qu'on a réussi!
+        success <- TRUE # Si on arrive ici, c'est qu'on a réussi!
         res # Retourne le résultat
       },
       error = function(cond) {
