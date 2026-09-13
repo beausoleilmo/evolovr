@@ -20,7 +20,8 @@ importFrom(DBI,
   dbDisconnect,
   dbExecute,
   dbGetQuery,
-  dbIsValid
+  dbIsValid,
+  dbQuoteLiteral
 )
 importFrom(cli,
   cli_abort,
@@ -58,7 +59,10 @@ importFrom(httr2,
 )
 importFrom(jsonlite,fromJSON)
 importFrom(rinat,get_inat_obs)
-importFrom(rlang,.data)
+importFrom(rlang,
+  ":=",
+  .data
+)
 importFrom(sf,
   st_coordinates,
   st_crs,

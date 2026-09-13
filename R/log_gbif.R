@@ -56,10 +56,10 @@ run_and_log <- function(con = NULL, title, sql_query) {
 #' Génère un fichier texte (.log) contenant des statistiques descriptives et des
 #' décomptes de lignes basés sur des filtres spécifiques appliqués à un fichier Parquet GBIF.
 #'
-#' @param con Connexion DuckDB valide (`DBIConnection`). Si `NULL`, une
+#' @param con Connexion DuckDB (duckdb_connection) valide (`DBIConnection`). Si `NULL`, une
 #'   connexion temporaire est initialisée via [setup_duckdb()].
-#' @param config Liste contenant au minimum l'élément `gbif_raw` (chemin vers le fichier Parquet).
-#' @param log_path Chaîne de caractères. Chemin d'accès et nom du fichier de sortie (ex: `summary.log`).
+#' @param path_in Chemin d'accès (Character) vers le fichier Parquet.
+#' @param path_log Chaîne de caractères. Chemin d'accès et nom du fichier de sortie (ex: `summary.log`).
 #'
 #' @return Chaîne de caractères (`character`) contenant le chemin du fichier log, de manière invisible.
 #' @export
@@ -71,35 +71,41 @@ run_and_log <- function(con = NULL, title, sql_query) {
 #'
 #' @examples
 #' \dontrun{
-#' paths <- list(gbif_raw = file.path(
-#'   "Incubateur/2025_05_24_Guide_biodiv_qc",
-#'   "data/partie_2/biodiv/gbif_data/gbif_raw_new.parquet"))
+#' paths <- file.path(
+#'   "data/raw/biodiv/gbif_data/gbif_raw_new.parquet")
 #' # Fichier temporaire
 #' tmp_log_file = tempfile(fileext = ".log")
 #' # Génère le fichier ".log"
-#' generate_gbif_log(config = paths, log_path = tmp_log_file)
+#' generate_gbif_log(path_in = paths, path_log = tmp_log_file)
 #' # Lire le fichier dans la console R
 #' cat(readLines(tmp_log_file), sep = "\n")
 #' }
-generate_gbif_log <- function(con = NULL, config, log_path = "gb_file_summary.log") {
-
+generate_gbif_log <- function(
+  con = NULL,
+  path_in,
+  path_log = "gb_file_summary.log"
+) {
   if (is.null(con)) {
     con <- setup_duckdb()
     on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
   }
 
   # Ouvrir le sink de manière sécuritaire avec on.exit
-  base::sink(log_path)
+  base::sink(path_log)
 
   on.exit(
     expr = base::sink(),
-    add = TRUE)
+    add = TRUE
+  )
 
   base::cat("=========================================================\n")
   base::cat(
     "Sommaire des données GBIF avec quelques filtres\n",
-    "Date : ", base::as.character(base::Sys.time()), "\n",
-    glue::glue("Fichier entrée : '{config$gbif_raw}'"), "\n",
+    "Date : ",
+    base::as.character(base::Sys.time()),
+    "\n",
+    glue::glue("Fichier entrée : '{path_in}'"),
+    "\n",
     sep = ""
   )
   base::cat("=========================================================\n\n")
@@ -115,7 +121,7 @@ generate_gbif_log <- function(con = NULL, config, log_path = "gb_file_summary.lo
     src = con,
     from = dbplyr::sql(
       glue::glue(
-        "SELECT * FROM read_parquet('{config$gbif_raw}')"
+        "SELECT * FROM read_parquet('{path_in}')"
       )
     )
   )
@@ -153,7 +159,8 @@ generate_gbif_log <- function(con = NULL, config, log_path = "gb_file_summary.lo
       FROM ({db_source})
       WHERE
        stateprovince IN ('Quebec', 'Québec', 'Qc')
-       AND countrycode = 'CA';")
+       AND countrycode = 'CA';"
+    )
   )
 
   run_and_log(
@@ -164,7 +171,8 @@ generate_gbif_log <- function(con = NULL, config, log_path = "gb_file_summary.lo
       FROM ({db_source})
       WHERE
        stateprovince IN ('Quebec', 'Québec', 'Qc')
-       OR stateprovince IS NULL;")
+       OR stateprovince IS NULL;"
+    )
   )
 
   run_and_log(
@@ -173,7 +181,8 @@ generate_gbif_log <- function(con = NULL, config, log_path = "gb_file_summary.lo
     sql_query = glue::glue(
       "SELECT basisofrecord, count(basisofrecord) as n
        FROM ({db_source})
-       GROUP BY basisofrecord;")
+       GROUP BY basisofrecord;"
+    )
   )
 
   # CORRECTION : L'appel original manquait l'argument 'con' ici
@@ -184,7 +193,8 @@ generate_gbif_log <- function(con = NULL, config, log_path = "gb_file_summary.lo
       "
       SELECT taxonrank, count(taxonrank) as n
       FROM ({db_source})
-      GROUP BY all ORDER BY n DESC;")
+      GROUP BY all ORDER BY n DESC;"
+    )
   )
 
   run_and_log(
@@ -194,7 +204,8 @@ generate_gbif_log <- function(con = NULL, config, log_path = "gb_file_summary.lo
       "SELECT kingdom, count(kingdom) as n
        FROM ({db_source})
        GROUP BY all
-       ORDER BY n DESC;")
+       ORDER BY n DESC;"
+    )
   )
 
   run_and_log(
@@ -202,13 +213,13 @@ generate_gbif_log <- function(con = NULL, config, log_path = "gb_file_summary.lo
     title = "Compte de Species non-null ou non-NA:",
     sql_query = glue::glue(
       "SELECT count(species) as n
-       FROM ({db_source});")
+       FROM ({db_source});"
+    )
   )
 
   run_and_log(
     con = con,
-    title =
-      "Filtres taxonrank, kingdom, coordinateUncertaintyInMeters (<= 200):",
+    title = "Filtres taxonrank, kingdom, coordinateUncertaintyInMeters (<= 200):",
     sql_query = glue::glue(
       "SELECT count(*) as n
        FROM ({db_source})
@@ -223,5 +234,5 @@ generate_gbif_log <- function(con = NULL, config, log_path = "gb_file_summary.lo
     )
   )
 
-  base::invisible(log_path)
+  base::invisible(path_log)
 }

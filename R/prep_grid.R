@@ -1,9 +1,9 @@
-#' Ajout des régions admins aux données GBIF
+#' Ajout d'indices H3 aux municipalités du Québec
 #'
 #' @description
 #' Utiliser les polygones des régions administratifs (e.g. municipalités)
-#' pour établir une grille hexagonale H3 à une échelle donnée échelle
-#' (e.g., résolution 10L) qui couvre tous les polygones.
+#' pour établir une grille hexagonale H3 à une échelle/résolution donnée
+#' (e.g., `res = 10L`) qui couvre tous les polygones.
 #' Essentiellement, c'est un tableau des polygones de régions avec les indices
 #' H3 correspondant.
 #'
@@ -28,13 +28,13 @@
 #'
 #' @md
 #' @param con Connection à un pilote `duckdb()`
-#' @param config Liste avec les chemins d'accès au minimum :
-#' - `admin_shp` : mis en mémoire avec `ST_Read`.
-#' - `out_admin_pq` : qui exporte un fichier ".parquet".
-#' @param res "integer": nombre déterminant la résolution H3 e.g., `9L`
-#' @param colsAdmin (Character) est un vecteur des noms de colonnes à
-#' sélectionner pour les données administrative (rend le jeu de données
-#' plus petit).
+#' @param config Liste nommée avec chemins d'accès contenant au minimum :
+#' - `in_admin_shp` : chemin d'accès du fichier municipalités lu avec `ST_Read`.
+#' - `out_admin_pq` : chemin et nom du fichier avec extension ".parquet".
+#' @param res Nombre (integer) déterminant la résolution H3 e.g., `9L`
+#' @param colsAdmin  Vecteur (Character) des noms de colonnes à
+#' sélectionner des données administrative (rend le jeu de données
+#' plus petit au lieu de garder toutes les colonnes).
 #'
 #'
 #' @details
@@ -45,16 +45,21 @@
 #'
 #' Pour donner un ordre de grandeur :
 #' Resolution: 4,
-#' "842baa5ffffffff" est un polygone qui
+#' ["842baa5ffffffff"](https://h3geo.org/#hex=842baa5ffffffff)
+#' est un polygone qui
 #' engloble aisément Montréal et Laval (aire ~1930 km2),
 #'
 #' Resolution: 7,
-#' "872baa441ffffff" englobe le Mont-Royal (aire ~5.6 km2)
+#' ["872baa441ffffff"](https://h3geo.org/#hex=872baa441ffffff)
+#' englobe le Mont-Royal (aire ~5.6 km2)
 #'
 #' Resolution: 9,
-#' "872baa441ffffff" est plus petit que le Stade-Olympic (aire ~114490 m2)
+#' ["8a2baa46a50ffff"](https://h3geo.org/#hex=892baa46063ffff)
+#' est plus petit que le Stade-Olympic (aire ~114490 m2)
 #'
-#' Resolution: 10, "8a2baa46a50ffff" englobe la salle Wilfrid-Pelletier et
+#' Resolution: 10,
+#' ["8a2baa46a50ffff"](https://h3geo.org/#hex=8a2baa46a50ffff)
+#' englobe la salle Wilfrid-Pelletier et
 #' la maison symphonique (aire ~16345 m2)
 #'
 #' @returns
@@ -67,6 +72,7 @@
 #'
 #' @importFrom glue glue
 #' @importFrom rlang .data
+#' @importFrom rlang :=
 #'
 #' @examples
 #' \dontrun{
@@ -75,7 +81,7 @@
 #' folder = "test_path" # Dossier avec les données
 #' paths <- list(
 #'   # Importation
-#'   admin_shp  = file.path(folder, "munic_s.shp"),
+#'   in_admin_shp  = file.path(folder, "munic_s.shp"),
 #'   # Exportation
 #'   out_admin_pq  = file.path(folder, "admin_mun.parquet")
 #' )
@@ -109,7 +115,7 @@ prep_h3_admin <- function(
     src = con,
     from = dbplyr::sql(
       glue::glue_sql(
-        "SELECT * FROM ST_Read({config$admin_shp})",
+        "SELECT * FROM ST_Read({config$in_admin_shp})",
         .con = con
       )
     )
@@ -121,10 +127,10 @@ prep_h3_admin <- function(
     dplyr::mutate(
       # ST_Transform a besoin de extension spatiale de duckdb
       # la quasiquation (i.e., !!) demande le walrus operator!!
-      !geom_sym := dbplyr::sql(
+      !!geom_col_name := dbplyr::sql(
         # Remplace le nom de la colonne de géométrie de manière dynamique
         glue::glue_sql(
-          "ST_Transform({`geom_sym`}, 'EPSG:4269', 'EPSG:4326')",
+          "ST_Transform({`geom_col_name`}, 'EPSG:4269', 'EPSG:4326')",
           .con = con
         )
       )
@@ -138,7 +144,7 @@ prep_h3_admin <- function(
       # cells = h3_polygon_wkt_to_cells(ST_AsText("geom"), as.integer(res))
       cells = dbplyr::sql(
         glue::glue_sql(
-          "h3_polygon_wkt_to_cells(ST_AsText({`geom_sym`}), {as.integer(res)})",
+          "h3_polygon_wkt_to_cells(ST_AsText({`geom_col_name`}), {as.integer(res)})",
           .con = con
         )
       )

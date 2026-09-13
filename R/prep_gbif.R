@@ -11,12 +11,16 @@
 #' @param con Connexion DuckDB valide. Si `NULL`, une
 #' connexion temporaire est initialisée.
 #' @param config Liste avec les chemins d'accès au minimum :
-#' \itemize{
-#'   \item \code{gbif_raw} : entrée.
-#'   \item \code{out_admin_pq} : référence administrative.
-#'   \item \code{out_gbif_pq} : sortie.
-#' }
+#' - `gbif_raw` : fichier GBIF d'entrée en .parquet préalablement
+#'   transformé après le téléchargement avec [evolovr::transforme_gbif()].
+#' - `out_admin_pq` : tableau des noms administrative et leur index
+#'      H3 à une résolution.
+#' - `out_gbif_pq` : chemin d'accès de sortie (`./path/nom.parquet`).
 #' @param res Integer. Résolution de la grille H3 (ex: `10L`).
+#' @param basisRec Vecteur avec basisOfRecord
+#' @param taxRank Vecteur avec taxonRank
+#' @param kingdm Vecteur avec kingdom
+#' @param coordUncertainM Vecteur avec coordinateUncertaintyInMeters
 #'
 #' @details
 #' L'identifiant H3 retourné est un entier DuckDB de type `uint64`.
@@ -30,7 +34,7 @@
 #' @importFrom dplyr tbl filter mutate inner_join
 #' @importFrom dbplyr remote_query sql
 #' @importFrom glue glue
-#' @importFrom DBI dbExecute
+#' @importFrom DBI dbExecute dbQuoteLiteral
 #' @importFrom tictoc tic toc
 #' @importFrom cli cli_abort cli_alert_info cli_alert_success
 #'   cli_progress_message
@@ -47,7 +51,15 @@
 #' )
 #' join_gbif_admin(con, config = paths, res = 10L)
 #' }
-join_gbif_admin <- function(con = NULL, config, res = 10L) {
+join_gbif_admin <- function(
+  con = NULL,
+  config,
+  res = 10L,
+  basisRec = c("HUMAN_OBSERVATION", "MACHINE_OBSERVATION"),
+  taxRank = c("SPECIES", "SUBSPECIES", "VARIETY"),
+  kingdm = c("Chromista", "Fungi", "Plantae", "Animalia"),
+  coordUncertainM = 200
+) {
   # Gestion de la connexion
   is_local_con <- is.null(con)
   if (is_local_con) {
@@ -59,9 +71,18 @@ join_gbif_admin <- function(con = NULL, config, res = 10L) {
       add = TRUE
     )
   }
+  # Chemin d'accès temporaire pour duckdb
+  # Bug : https://github.com/duckdb/duckdb-r/pull/2562
+  # Si personnes sur ancienne version de duckdb, cela va fonctionner
+  # avec ce code défensif.
+  duckdb_temp <- file.path(tempdir(), "duckdb", "temp")
+  dir.create(duckdb_temp, recursive = TRUE, showWarnings = FALSE)
+  safe_path <- DBI::dbQuoteLiteral(con, duckdb_temp)
+  set_temp_sql <- glue::glue("SET temp_directory = {safe_path};")
 
   # Validations des arguments de configuration
   required_paths <- c("out_admin_pq", "gbif_raw", "out_gbif_pq")
+  message(sprintf("Config paths %s", paste0(required_paths, collapse = ", ")))
   missing_paths <- setdiff(required_paths, names(config))
   if (length(missing_paths) > 0) {
     cli::cli_abort(
@@ -78,6 +99,7 @@ join_gbif_admin <- function(con = NULL, config, res = 10L) {
   )
 
   # Connexion aux tables distantes via DuckDB
+  message("Lecture de la grille admin-H3")
   admin_h3_idx_precalc <- dplyr::tbl(
     src = con,
     from = dbplyr::sql(
@@ -88,6 +110,7 @@ join_gbif_admin <- function(con = NULL, config, res = 10L) {
   )
 
   # Lire les données GBIF transformées du fichier original vers parquet
+  message("Lecture données GBIF")
   gb_tbl <- dplyr::tbl(
     src = con,
     from = dbplyr::sql(
@@ -98,22 +121,24 @@ join_gbif_admin <- function(con = NULL, config, res = 10L) {
   )
 
   # Pipeline de transformation et filtration des données GBIF
+  message("Pipeline de transformation")
+  # options
   pipeline <- gb_tbl |>
     # Quelque filtre des données GBIF
     dplyr::filter(
       # Retirer les espèces avec NA
       !is.na(species),
-      basisOfRecord %in% c("HUMAN_OBSERVATION", "MACHINE_OBSERVATION"),
+      basisOfRecord %in% basisRec,
       # Filtre administratif (pas vraiment besoin puisque nous utilisation
       # une jointure avec les données spatiales des régions administratives)
       # countryCode == "CA",
       # stateProvince %in% c("Quebec", "Québec", "Qc") |
       # is.na(stateProvince),
       # Filtre taxonomique
-      taxonRank %in% c("SPECIES", "SUBSPECIES", "VARIETY"),
-      kingdom %in% c("Chromista", "Fungi", "Plantae", "Animalia"),
+      taxonRank %in% taxRank,
+      kingdom %in% kingdm,
       # Filtre géographique
-      coordinateUncertaintyInMeters <= 200 |
+      coordinateUncertaintyInMeters <= coordUncertainM |
         is.na(coordinateUncertaintyInMeters)
     ) |>
     # Création colonne H3
@@ -160,7 +185,7 @@ join_gbif_admin <- function(con = NULL, config, res = 10L) {
   # prendre le contrôle de ce qui s'affiche dans la console
   # DBI::dbExecute(con, "SET enable_progress_bar = false;")
 
-  tictoc::tic()
+  tictoc::tic("Exportation")
   DBI::dbExecute(con, export_sql)
   tictoc::toc()
 

@@ -8,27 +8,38 @@ Voir le ticket GitHub du portail GBIF
 \url{https://github.com/gbif/portal-feedback/issues/6570}.
 }
 \usage{
-transforme_gbif(entree, sortie)
+transforme_gbif(entree, sortie, compression = "zstd", compression_level = 4)
 }
 \arguments{
-\item{entree}{Character. Chemin d'accès vers le répertoire contenant les
+\item{entree}{Chemin d'accès (Character) vers le répertoire contenant les
 fichiers \code{occurrence.parquet} du GBIF.}
 
-\item{sortie}{Character. Chemin d'accès du nouveau fichier Parquet
-e.g., "\code{donnees/gbif_raw_new.parquet}"}
+\item{sortie}{Chemin d'accès (Character) du nouveau fichier Parquet
+e.g., \code{donnees/gbif_raw_new.parquet}}
+
+\item{compression}{Type de compression pour \verb{COPY() TO (FORMAT PARQUET)}.
+(Défaut : "zstd")}
+
+\item{compression_level}{Niveau de compression (Défaut : 4)}
 }
 \value{
 NULL. La fonction exporte directement le fichier
 traité sur le disque.
 }
 \description{
-Transforme un répertoire de données brutes GBIF au format \code{SIMPLE_PARQUET}
-en un unique fichier Parquet compressé et non partitionné contenant une
-colonne géométrique géospatiale (\code{geometry}).
+À partir du téléchargement des données de GBIF en au
+format \code{SIMPLE_PARQUET} (dossier avec fichiers nommé d'une série de
+chiffre comme "003997"),
+transforme un répertoire de données brutes GBIF en un unique fichier :
+\itemize{
+\item Parquet compressé et non partitionné
+\item colonne camelCase.
+\item colonne géométrique géospatiale (\code{geometry}).
+}
 }
 \details{
-L'utilisation de la compression ZSTD ("\code{COMPRESSION 'zstd'}") et
-le niveau 4  ("\code{COMPRESSION_LEVEL 4}") permet d'optimiser
+L'utilisation de la compression ZSTD (\verb{COMPRESSION 'zstd'}) et
+le niveau 4  (\verb{COMPRESSION_LEVEL 4}) permet d'optimiser
 l'espace disque tout en conservant la performances de lecture.
 }
 \note{

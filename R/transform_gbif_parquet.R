@@ -2,19 +2,25 @@
 #' @md
 #'
 #' @description
-#' Transforme un répertoire de données brutes GBIF au format `SIMPLE_PARQUET`
-#' en un unique fichier Parquet compressé et non partitionné contenant une
-#' colonne géométrique géospatiale (`geometry`).
+#' À partir du téléchargement des données de GBIF en au
+#' format `SIMPLE_PARQUET` (dossier avec fichiers nommé d'une série de
+#' chiffre comme "003997"),
+#' transforme un répertoire de données brutes GBIF en un unique fichier :
+#' - Parquet compressé et non partitionné
+#' - colonne camelCase.
+#' - colonne géométrique géospatiale (`geometry`).
 #'
-#' @param entree Character. Chemin d'accès vers le répertoire contenant les
-#'   fichiers \code{occurrence.parquet} du GBIF.
-#' @param sortie Character. Chemin d'accès du nouveau fichier Parquet
-#' e.g., "\code{donnees/gbif_raw_new.parquet}"
-#'
+#' @param entree Chemin d'accès (Character) vers le répertoire contenant les
+#'   fichiers `occurrence.parquet` du GBIF.
+#' @param sortie Chemin d'accès (Character) du nouveau fichier Parquet
+#' e.g., `donnees/gbif_raw_new.parquet`
+#' @param compression Type de compression pour `COPY() TO (FORMAT PARQUET)`.
+#' (Défaut : "zstd")
+#' @param compression_level Niveau de compression (Défaut : 4)
 #'
 #' @details
-#' L'utilisation de la compression ZSTD ("\code{COMPRESSION 'zstd'}") et
-#' le niveau 4  ("\code{COMPRESSION_LEVEL 4}") permet d'optimiser
+#' L'utilisation de la compression ZSTD (`COMPRESSION 'zstd'`) et
+#' le niveau 4  (`COMPRESSION_LEVEL 4`) permet d'optimiser
 #' l'espace disque tout en conservant la performances de lecture.
 #'
 #' @source Voir le ticket GitHub du portail GBIF
@@ -45,7 +51,12 @@
 #'   sortie = "gbif_raw_new.parquet"
 #' )
 #' }
-transforme_gbif <- function(entree, sortie) {
+transforme_gbif <- function(
+  entree,
+  sortie,
+  compression = "zstd",
+  compression_level = 4
+) {
   # Vérifications
   if (!dir.exists(entree)) {
     cli::cli_abort("Le répertoire d'entrée {.path {entree}} n'existe pas.")
@@ -121,7 +132,7 @@ transforme_gbif <- function(entree, sortie) {
   )
 
   cli::cli_alert_info(
-    text = "Nombre de fichiers fragmentés à traiter : {nb_fichiers$total}"
+    text = "Nombre de fichiers à traiter du dossier .parquet : {nb_fichiers$total}"
   )
 
   if (is.na(nb_fichiers$total) || nb_fichiers$total == 0) {
@@ -129,7 +140,10 @@ transforme_gbif <- function(entree, sortie) {
       "Aucun fichier valide à traiter dans le répertoire source."
     )
   }
-
+  # En duckdb, si on regarde un fichier au hasard, on voit les noms en
+  # minuscule seulement ce qui ne respecte pas le DarwinCore.
+  # from read_parquet('0010290-260519110011954/occurrence.parquet/003975')
+  # limit 10;
   # Dictionnaire de traduction (Format : "nom_origine" = "NomCamelCase")
   # pour respecter le DarwinCore
   # Mettez-y uniquement les colonnes qui changent de nom.
@@ -190,7 +204,7 @@ transforme_gbif <- function(entree, sortie) {
     "year"
   )
 
-  # 3. Construire dynamiquement les morceaux du SELECT
+  # Construire dynamiquement les morceaux du SELECT
   aliased_fields <- paste(
     names(dwc_mapping),
     "AS",
@@ -199,19 +213,24 @@ transforme_gbif <- function(entree, sortie) {
   )
   simple_fields <- paste(unchanged_cols, collapse = ",\n    ")
 
+  # PREPARE : prépare une requête SQL qui sera exécuté
+  # en remplaçant le ? par un paramètre qu'on passe (e.g., le nom d'un
+  # fichier de sortie!).
+  # Voir la commande "EXECUTE" plus bas.
   # Requête SQL avec colonnes renomées
-  sql_query <- glue(
+  sql_query <- glue_sql(
     "
   PREPARE copy_spatial_data AS
   COPY (
     SELECT
-      {aliased_fields},
-      {simple_fields},
+      {aliased_fields_sql},
+      {simple_fields_sql},
       ST_Point(decimallongitude, decimallatitude) AS geometry
     FROM
       read_parquet(getvariable('gb_files'))
-  ) TO ? (FORMAT parquet, COMPRESSION 'zstd', COMPRESSION_LEVEL 4);
-"
+  ) TO ? (FORMAT parquet, COMPRESSION {compression}, COMPRESSION_LEVEL {compression_level});
+",
+    .con = con
   )
 
   # Préparation et exécution de la copie Spatiale
@@ -228,25 +247,16 @@ transforme_gbif <- function(entree, sortie) {
   )
 
   cli::cli_progress_message("Transformation des données GBIF en cours...")
-  cli::cli_ul()
-  cli::cli_li("Source : {.path {entree}}")
-  cli::cli_li("Destination : {.path {sortie}}")
-  cli::cli_end()
+  cli::cli_bullets(
+    c(
+      "*" = "Source : {.path {entree}}",
+      "*" = "Destination : {.path {sortie}}"
+    )
+  )
 
-  message(sprintf(
-    fmt = "
-    Exécution de la copie de données spatiales
-    Fichier entrée : %s
-    Fichier sortie : %s
-    ",
-    entree,
-    sortie
-  ))
-
-  tictoc::tic() # 70 s
+  tictoc::tic("Pipeline de transformation") # 70 s
   DBI::dbExecute(con, "EXECUTE copy_spatial_data(getvariable('outpath'));")
   tictoc::toc()
-  cli_progress_message("fin")
 
   # Nettoyage de la requête préparée
   DBI::dbExecute(con, "DEALLOCATE copy_spatial_data;")

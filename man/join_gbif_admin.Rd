@@ -5,7 +5,15 @@
 \title{Prépare et jointure des données GBIF et
 des régions administratives via la grille H3}
 \usage{
-join_gbif_admin(con = NULL, config, res = 10L)
+join_gbif_admin(
+  con = NULL,
+  config,
+  res = 10L,
+  basisRec = c("HUMAN_OBSERVATION", "MACHINE_OBSERVATION"),
+  taxRank = c("SPECIES", "SUBSPECIES", "VARIETY"),
+  kingdm = c("Chromista", "Fungi", "Plantae", "Animalia"),
+  coordUncertainM = 200
+)
 }
 \arguments{
 \item{con}{Connexion DuckDB valide. Si \code{NULL}, une
@@ -13,12 +21,22 @@ connexion temporaire est initialisée.}
 
 \item{config}{Liste avec les chemins d'accès au minimum :
 \itemize{
-\item \code{gbif_raw} : entrée.
-\item \code{out_admin_pq} : référence administrative.
-\item \code{out_gbif_pq} : sortie.
+\item \code{gbif_raw} : fichier GBIF d'entrée en .parquet préalablement
+transformé après le téléchargement avec \code{\link[=transforme_gbif]{transforme_gbif()}}.
+\item \code{out_admin_pq} : tableau des noms administrative et leur index
+H3 à une résolution.
+\item \code{out_gbif_pq} : chemin d'accès de sortie (\code{./path/nom.parquet}).
 }}
 
 \item{res}{Integer. Résolution de la grille H3 (ex: \code{10L}).}
+
+\item{basisRec}{Vecteur avec basisOfRecord}
+
+\item{taxRank}{Vecteur avec taxonRank}
+
+\item{kingdm}{Vecteur avec kingdom}
+
+\item{coordUncertainM}{Vecteur avec coordinateUncertaintyInMeters}
 }
 \value{
 NULL. La fonction exporte directement le

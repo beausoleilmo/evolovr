@@ -2,57 +2,87 @@
 % Please edit documentation in R/prep_grid.R
 \name{prep_h3_admin}
 \alias{prep_h3_admin}
-\title{Ajout des régions admins aux données GBIF}
+\title{Ajout d'indices H3 aux municipalités du Québec}
 \usage{
-prep_h3_admin(con = NULL, config, res = 10L)
+prep_h3_admin(
+  con = NULL,
+  config,
+  res = 10L,
+  colsAdmin = c("MUS_NM_MUN", "MUS_NM_MRC", "MUS_NM_REG")
+)
 }
 \arguments{
 \item{con}{Connection à un pilote \code{duckdb()}}
 
-\item{config}{Liste avec les chemins d'accès au minimum :
+\item{config}{Liste nommée avec chemins d'accès contenant au minimum :
 \itemize{
-\item \code{admin_shp} : mis en mémoire avec \code{ST_Read}.
-\item \code{out_admin_pq} : qui exporte un fichier ".parquet".
+\item \code{in_admin_shp} : chemin d'accès du fichier municipalités lu avec \code{ST_Read}.
+\item \code{out_admin_pq} : chemin et nom du fichier avec extension ".parquet".
 }}
 
-\item{res}{"integer": nombre déterminant la résolution H3 e.g., \code{9L}}
+\item{res}{Nombre (integer) déterminant la résolution H3 e.g., \code{9L}}
+
+\item{colsAdmin}{Vecteur (Character) des noms de colonnes à
+sélectionner des données administrative (rend le jeu de données
+plus petit au lieu de garder toutes les colonnes).}
 }
 \value{
-Exportation de données \code{out_admin_pq}.
+Exportation de données sous forme d'un tableau des colonnes \code{colsAdmin}
+et h3_cell qui est l'indice de l'hexagone du système H3. À résolution
+10L pour la province de Québec,
+\code{out_admin_pq}.
 }
 \description{
-Intersection de polygones administratifs (e.g. municipalités) avec
-la grille H3 à fine échelle (e.g., résolution 10L).
+Utiliser les polygones des régions administratifs (e.g. municipalités)
+pour établir une grille hexagonale H3 à une échelle/résolution donnée
+(e.g., \code{res = 10L}) qui couvre tous les polygones.
+Essentiellement, c'est un tableau des polygones de régions avec les indices
+H3 correspondant.
 
-L'ajout des H3, aux données administratives, crée une grille standardisée
-utile pour en faire référence avec des données GBIF
+L'ajout des indices H3, aux données administratives, crée une grille
+standardisée avec tous les noms de régions associés à H3.
+Cette grille
+utile pour en faire référence avec des données GBIF.
+Pour faire une carte en ligne, .pmtiles serait mieux.
+
+L'utilisation de duckdb permet de créer un fichier de 43.86 millions de
+lignes puis d'exporter directement en parquet et sa compression.
+L'exportation en parquet permet d'avoir un fichier de petite taille
+(compression), et rapidement (plus que .csv)
 }
 \details{
 Connexion à \code{duckdb} et trouver les indices H3 à une résolution \code{res}.
-Utiliser \code{transmute} pour garder que les noms '\code{MUS_NM_*}' et
-l'indice H3. Copie du fichier selon une préférence
+Utiliser \code{transmute} pour garder que les noms '\verb{MUS_NM_*}' et
+l'indice H3. Exportation (\code{COPY}) du fichier selon une préférence
 choisie dans le \code{config}.
 
 Pour donner un ordre de grandeur :
 Resolution: 4,
-"842baa5ffffffff" est un polygone qui
+\href{https://h3geo.org/#hex=842baa5ffffffff}{"842baa5ffffffff"}
+est un polygone qui
 engloble aisément Montréal et Laval (aire ~1930 km2),
 
 Resolution: 7,
-"872baa441ffffff" englobe le Mont-Royal (aire ~5.6 km2)
+\href{https://h3geo.org/#hex=872baa441ffffff}{"872baa441ffffff"}
+englobe le Mont-Royal (aire ~5.6 km2)
 
 Resolution: 9,
-"872baa441ffffff" est plus petit que le Stade-Olympic (aire ~114490 m2)
+\href{https://h3geo.org/#hex=892baa46063ffff}{"8a2baa46a50ffff"}
+est plus petit que le Stade-Olympic (aire ~114490 m2)
 
-Resolution: 10, "8a2baa46a50ffff" englobe la salle Wilfrid-Pelletier et
+Resolution: 10,
+\href{https://h3geo.org/#hex=8a2baa46a50ffff}{"8a2baa46a50ffff"}
+englobe la salle Wilfrid-Pelletier et
 la maison symphonique (aire ~16345 m2)
 }
 \section{Utilisation potentielle }{
 
-Permet de faire une grille standardiséee (e.g., H3), mais informée par une
-variable spatiale (polygones).
-Pour faire de la cartographie de points qui
+Attribue un nom de région à une grille standardisée H3.
+Pour faire de la cartographie statique de points qui
 se présenterait en unité spatiale standardisée.
+Cela permet de garder séparer la colonne des informations de région des
+données de GBIF. Avant, le code fait tout en même temps. Mais la grille
+n'a besoin d'être créé qu'une seule fois. Donc, cette étape a été séparée.
 }
 
 \examples{
@@ -62,7 +92,7 @@ con = setup_duckdb()
 folder = "test_path" # Dossier avec les données
 paths <- list(
   # Importation
-  admin_shp  = file.path(folder, "munic_s.shp"),
+  in_admin_shp  = file.path(folder, "munic_s.shp"),
   # Exportation
   out_admin_pq  = file.path(folder, "admin_mun.parquet")
 )

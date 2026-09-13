@@ -4,15 +4,15 @@
 \alias{generate_gbif_log}
 \title{Générer un fichier sommaire de statistiques sur les données GBIF}
 \usage{
-generate_gbif_log(con = NULL, config, log_path = "gb_file_summary.log")
+generate_gbif_log(con = NULL, path_in, path_log = "gb_file_summary.log")
 }
 \arguments{
-\item{con}{Connexion DuckDB valide (`DBIConnection`). Si `NULL`, une
+\item{con}{Connexion DuckDB (duckdb_connection) valide (`DBIConnection`). Si `NULL`, une
 connexion temporaire est initialisée via [setup_duckdb()].}
 
-\item{config}{Liste contenant au minimum l'élément `gbif_raw` (chemin vers le fichier Parquet).}
+\item{path_in}{Chemin d'accès (Character) vers le fichier Parquet.}
 
-\item{log_path}{Chaîne de caractères. Chemin d'accès et nom du fichier de sortie (ex: `summary.log`).}
+\item{path_log}{Chaîne de caractères. Chemin d'accès et nom du fichier de sortie (ex: `summary.log`).}
 }
 \value{
 Chaîne de caractères (`character`) contenant le chemin du fichier log, de manière invisible.
@@ -23,13 +23,12 @@ décomptes de lignes basés sur des filtres spécifiques appliqués à un fichie
 }
 \examples{
 \dontrun{
-paths <- list(gbif_raw = file.path(
-  "Incubateur/2025_05_24_Guide_biodiv_qc",
-  "data/partie_2/biodiv/gbif_data/gbif_raw_new.parquet"))
+paths <- file.path(
+  "data/raw/biodiv/gbif_data/gbif_raw_new.parquet")
 # Fichier temporaire
 tmp_log_file = tempfile(fileext = ".log")
 # Génère le fichier ".log"
-generate_gbif_log(config = paths, log_path = tmp_log_file)
+generate_gbif_log(path_in = paths, path_log = tmp_log_file)
 # Lire le fichier dans la console R
 cat(readLines(tmp_log_file), sep = "\n")
 }
