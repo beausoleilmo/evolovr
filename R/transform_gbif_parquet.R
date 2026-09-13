@@ -223,8 +223,8 @@ transforme_gbif <- function(
   PREPARE copy_spatial_data AS
   COPY (
     SELECT
-      {aliased_fields_sql},
-      {simple_fields_sql},
+      {aliased_fields},
+      {simple_fields},
       ST_Point(decimallongitude, decimallatitude) AS geometry
     FROM
       read_parquet(getvariable('gb_files'))
