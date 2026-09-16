@@ -147,7 +147,7 @@ generate_gbif_log <- function(
     sql_query = glue::glue(
       "SELECT count(*) as n
       FROM ({db_source})
-      WHERE countrycode = 'CA';"
+      WHERE countryCode = 'CA';"
     )
   )
 
@@ -159,7 +159,7 @@ generate_gbif_log <- function(
       FROM ({db_source})
       WHERE
        stateprovince IN ('Quebec', 'Québec', 'Qc')
-       AND countrycode = 'CA';"
+       AND countryCode = 'CA';"
     )
   )
 
@@ -170,8 +170,8 @@ generate_gbif_log <- function(
       "SELECT count(*) as n
       FROM ({db_source})
       WHERE
-       stateprovince IN ('Quebec', 'Québec', 'Qc')
-       OR stateprovince IS NULL;"
+       stateProvince IN ('Quebec', 'Québec', 'Qc')
+       OR stateProvince IS NULL;"
     )
   )
 
@@ -179,9 +179,9 @@ generate_gbif_log <- function(
     con = con,
     title = "Sommaire basisOfRecord:",
     sql_query = glue::glue(
-      "SELECT basisofrecord, count(basisofrecord) as n
+      "SELECT basisOfRecord, count(basisOfRecord) as n
        FROM ({db_source})
-       GROUP BY basisofrecord;"
+       GROUP BY basisOfRecord;"
     )
   )
 
@@ -191,7 +191,7 @@ generate_gbif_log <- function(
     title = "Sommaire taxonRank:",
     sql_query = glue::glue(
       "
-      SELECT taxonrank, count(taxonrank) as n
+      SELECT taxonRank, count(taxonRank) as n
       FROM ({db_source})
       GROUP BY all ORDER BY n DESC;"
     )
@@ -219,12 +219,12 @@ generate_gbif_log <- function(
 
   run_and_log(
     con = con,
-    title = "Filtres taxonrank, kingdom, coordinateUncertaintyInMeters (<= 200):",
+    title = "Filtres taxonRank, kingdom, coordinateUncertaintyInMeters (<= 200):",
     sql_query = glue::glue(
       "SELECT count(*) as n
        FROM ({db_source})
        WHERE
-         taxonrank IN ('SPECIES', 'SUBSPECIES', 'VARIETY')
+         taxonRank IN ('SPECIES', 'SUBSPECIES', 'VARIETY')
          AND
          kingdom IN ('Chromista', 'Fungi', 'Plantae', 'Animalia')
          AND

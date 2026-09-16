@@ -160,7 +160,7 @@ join_gbif_admin <- function(
       by = "h3_cell"
     )
 
-  # 5. Préparation de la requête d'exportation native
+  # Préparation de la requête d'exportation native
   query_raw <- dbplyr::remote_query(pipeline)
 
   export_sql <- glue::glue(
@@ -185,7 +185,7 @@ join_gbif_admin <- function(
   # prendre le contrôle de ce qui s'affiche dans la console
   # DBI::dbExecute(con, "SET enable_progress_bar = false;")
 
-  tictoc::tic("Exportation")
+  tictoc::tic("Exécution pipeline de filtre, H3 et jointure admin-H3")
   DBI::dbExecute(con, export_sql)
   tictoc::toc()
 

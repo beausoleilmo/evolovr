@@ -218,7 +218,7 @@ transforme_gbif <- function(
   # fichier de sortie!).
   # Voir la commande "EXECUTE" plus bas.
   # Requête SQL avec colonnes renomées
-  sql_query <- glue_sql(
+  sql_query <- glue::glue(
     "
   PREPARE copy_spatial_data AS
   COPY (
@@ -228,9 +228,12 @@ transforme_gbif <- function(
       ST_Point(decimallongitude, decimallatitude) AS geometry
     FROM
       read_parquet(getvariable('gb_files'))
-  ) TO ? (FORMAT parquet, COMPRESSION {compression}, COMPRESSION_LEVEL {compression_level});
-",
-    .con = con
+  ) TO ? (
+    FORMAT parquet, 
+    COMPRESSION {compression}, 
+    COMPRESSION_LEVEL {compression_level}
+    );
+"
   )
 
   # Préparation et exécution de la copie Spatiale
@@ -255,7 +258,12 @@ transforme_gbif <- function(
   )
 
   tictoc::tic("Pipeline de transformation") # 70 s
+  # Désactive la progression duckdb
+  dbExecute(con, "SET enable_progress_bar = false;")
+
   DBI::dbExecute(con, "EXECUTE copy_spatial_data(getvariable('outpath'));")
+
+  dbExecute(con, "SET enable_progress_bar = true;")
   tictoc::toc()
 
   # Nettoyage de la requête préparée
