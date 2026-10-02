@@ -1,3 +1,10 @@
+# Changements v 0.1.3
+
+* Log est plus clair dans sa documentation 
+* La préparation des données GBIF (`join_gbif_admin()`) applique un
+inner join entre les points GBIF et la zone du
+Québec (comme pour filtrer les données)
+
 # Changements v 0.1.2
 
 * Meilleure doc pour transform_gbif_parquet.R. 
