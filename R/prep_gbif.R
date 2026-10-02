@@ -18,6 +18,7 @@
 #' - `out_gbif_pq` : chemin d'accès de sortie (`./path/nom.parquet`).
 #' @param res Integer. Résolution de la grille H3 (ex: `10L`).
 #' @param basisRec Vecteur avec basisOfRecord
+#' @param occStat Vecteur avec occurrenceStatus
 #' @param taxRank Vecteur avec taxonRank
 #' @param kingdm Vecteur avec kingdom
 #' @param coordUncertainM Vecteur avec coordinateUncertaintyInMeters
@@ -56,6 +57,7 @@ join_gbif_admin <- function(
   config,
   res = 10L,
   basisRec = c("HUMAN_OBSERVATION", "MACHINE_OBSERVATION"),
+  occStat = c("PRESENT"),
   taxRank = c("SPECIES", "SUBSPECIES", "VARIETY"),
   kingdm = c("Chromista", "Fungi", "Plantae", "Animalia"),
   coordUncertainM = 200
@@ -82,7 +84,13 @@ join_gbif_admin <- function(
 
   # Validations des arguments de configuration
   required_paths <- c("out_admin_pq", "gbif_raw", "out_gbif_pq")
-  message(sprintf("Config paths %s", paste0(required_paths, collapse = ", ")))
+  message(
+    "Config paths:\n",
+    paste(
+      sprintf(" %s :\t%s", required_paths, config[required_paths]),
+      collapse = "\n"
+    )
+  )
   missing_paths <- setdiff(required_paths, names(config))
   if (length(missing_paths) > 0) {
     cli::cli_abort(
@@ -99,16 +107,21 @@ join_gbif_admin <- function(
   )
 
   # Connexion aux tables distantes via DuckDB
-  message("Lecture de la grille admin-H3")
-  admin_h3_idx_precalc <- dplyr::tbl(
-    src = con,
-    from = dbplyr::sql(
-      glue::glue(
-        "SELECT * FROM read_parquet('{config$out_admin_pq}')"
-      )
-    )
-  )
-
+  # NOTE : finalement, ne PAS faire la jointure à ce stade
+  # message("Lecture de la grille admin-H3")
+  # admin_tbl <- dplyr::tbl(
+  #   src = con,
+  #   from = dbplyr::sql(
+  #     glue::glue(
+  #       "SELECT * FROM read_parquet('{config$out_admin_pq}')"
+  #     )
+  #   )
+  # ) |>
+  #       dplyr::select(
+  #         "MUS_NM_MUN",
+  #         "MUS_NM_MRC",
+  #         "MUS_NM_REG"
+  #       )
   # Lire les données GBIF transformées du fichier original vers parquet
   message("Lecture données GBIF")
   gb_tbl <- dplyr::tbl(
@@ -123,17 +136,21 @@ join_gbif_admin <- function(
   # Pipeline de transformation et filtration des données GBIF
   message("Pipeline de transformation")
   # options
-  pipeline <- gb_tbl |>
+  pipeline_filt <- gb_tbl |>
     # Quelque filtre des données GBIF
     dplyr::filter(
       # Retirer les espèces avec NA
-      !is.na(species),
+      # NOTE : après exploration, ce champ GBIF n'est pas obligatoire
+      # alors que scientificName oui. Donc, beaucoup de données sont manquantes
+      # si on met ce filtre.
+      # !is.na(species),
       basisOfRecord %in% basisRec,
       # Filtre administratif (pas vraiment besoin puisque nous utilisation
       # une jointure avec les données spatiales des régions administratives)
       # countryCode == "CA",
       # stateProvince %in% c("Quebec", "Québec", "Qc") |
       # is.na(stateProvince),
+      occurrenceStatus %in% occStat,
       # Filtre taxonomique
       taxonRank %in% taxRank,
       kingdom %in% kingdm,
@@ -152,13 +169,48 @@ join_gbif_admin <- function(
           )"
         )
       )
-    ) |>
-    # Ajout de l'information administrative
-    # --> trouver l'intersection entre X et Y
-    dplyr::inner_join(
-      admin_h3_idx_precalc,
-      by = "h3_cell"
     )
+  # Spatial join to keep only points inside municipality polygons
+  #
+
+  colsAdmin <- c(
+    "MUS_NM_MUN",
+    "MUS_NM_MRC",
+    "MUS_NM_REG"
+  )
+
+  # Préparer pour SELECT de colonnes dans SQL
+  cols_sql <- paste(colsAdmin, collapse = ", ")
+
+  # NOTE : jointure (inner join) des données admin
+  # filtre les données spatialement tout en ajoutant le nom des colonnes
+  # administratives.
+  pipeline <- dplyr::tbl(
+    src = con,
+    from = dbplyr::sql(
+      glue::glue(
+        "
+      SELECT 
+        g.*, 
+        {cols_sql}
+      FROM ({dbplyr::remote_query(pipeline_filt)}) AS g
+      INNER JOIN (
+        SELECT 
+          {cols_sql}, 
+          ST_MakeValid(ST_Transform(geometry, 'EPSG:4269', 'EPSG:4326')) AS geom_admin
+        FROM read_parquet('{config$out_admin_pq}')
+      ) AS q
+      ON ST_Intersects(g.geometry, q.geom_admin)
+    "
+      )
+    )
+  )
+  # Ajout de l'information administrative
+  # --> trouver l'intersection entre X et Y
+  # dplyr::inner_join(
+  #   admin_h3_idx_precalc,
+  #   by = "h3_cell"
+  # )
 
   # Préparation de la requête d'exportation native
   query_raw <- dbplyr::remote_query(pipeline)
