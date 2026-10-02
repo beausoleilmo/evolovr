@@ -183,9 +183,9 @@ stateProvince == Quebec, Québec, Qc or stateProvince IS NULL:",
 
   run_and_log(
     con = con,
-    title = "Compte de Species non-null ou non-NA:",
+    title = "Compte de scientificName non-null ou non-NA:",
     sql_query = glue::glue(
-      "SELECT count(species) as n
+      "SELECT count(scientificName) as n
       FROM ({db_source});"
     )
   )
@@ -247,7 +247,7 @@ stateProvince == Quebec, Québec, Qc or stateProvince IS NULL:",
     title = "Sommaire du compte par taxonRank:",
     sql_query = glue::glue(
       "
-      SELECT , count(taxonRank) as n
+      SELECT count(taxonRank) as n
       FROM ({db_source})
       GROUP BY all ORDER BY n DESC;"
     )
