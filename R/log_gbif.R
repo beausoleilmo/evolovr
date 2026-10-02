@@ -83,12 +83,18 @@ run_and_log <- function(con = NULL, title, sql_query) {
 generate_gbif_log <- function(
   con = NULL,
   path_in,
-  path_log = "gb_file_summary.log"
+  path_log = "gb_file_summary.log",
+  notes = ""
 ) {
   if (is.null(con)) {
     con <- setup_duckdb()
     on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
   }
+  # Désactiver la barre de progression de DuckDB
+  DBI::dbExecute(
+    conn = con,
+    statement = "SET enable_progress_bar = false;"
+  )
 
   # Ouvrir le sink de manière sécuritaire avec on.exit
   base::sink(path_log)
@@ -98,24 +104,7 @@ generate_gbif_log <- function(
     add = TRUE
   )
 
-  base::cat("=========================================================\n")
-  base::cat(
-    "Sommaire des données GBIF avec quelques filtres\n",
-    "Date : ",
-    base::as.character(base::Sys.time()),
-    "\n",
-    glue::glue("Fichier entrée : '{path_in}'"),
-    "\n",
-    sep = ""
-  )
-  base::cat("=========================================================\n\n")
-
-  # Désactiver la barre de progression de DuckDB
-  DBI::dbExecute(
-    conn = con,
-    statement = "SET enable_progress_bar = false;"
-  )
-
+  ## Lecture des données -------------------------------------------------
   # Établir le pointeur de table de base
   gb_tbl <- dplyr::tbl(
     src = con,
@@ -131,10 +120,24 @@ generate_gbif_log <- function(
     x = gb_tbl
   )
 
+  # Imprime l'entête --------------------------------------------------------
+  base::cat("=========================================================\n")
+  base::cat(
+    "Sommaire des données GBIF avec quelques filtres\n",
+    "Date : ",
+    base::as.character(base::Sys.time()),
+    "\n",
+    glue::glue("Fichier entrée : '{path_in}'"),
+    "\n",
+    sep = ""
+  )
+  base::cat("Notes : ", notes, fill = TRUE)
+  base::cat("=========================================================\n\n")
+
   # Exécution des requêtes métriques
   run_and_log(
     con = con,
-    title = "Total des rangées dans le fichier :",
+    title = "Total des rangées `count()` dans le fichier :",
     sql_query = glue::glue(
       "SELECT count(*) as n
       FROM ({db_source});"
@@ -143,7 +146,8 @@ generate_gbif_log <- function(
 
   run_and_log(
     con = con,
-    title = "countryCode = 'CA':",
+    title = "Compte rangées avec filtre :
+countryCode = 'CA':",
     sql_query = glue::glue(
       "SELECT count(*) as n
       FROM ({db_source})
@@ -153,7 +157,8 @@ generate_gbif_log <- function(
 
   run_and_log(
     con = con,
-    title = "stateProvince == Quebec, Québec, Qc & Canada:",
+    title = "Compte rangées avec filtre :
+stateProvince == Quebec, Québec, Qc & countryCode == Canada:",
     sql_query = glue::glue(
       "SELECT count(*) as n
       FROM ({db_source})
@@ -165,7 +170,8 @@ generate_gbif_log <- function(
 
   run_and_log(
     con = con,
-    title = "stateProvince == Quebec, Québec, Qc or stateProvince IS NULL:",
+    title = "Compte rangées avec filtre :
+stateProvince == Quebec, Québec, Qc or stateProvince IS NULL:",
     sql_query = glue::glue(
       "SELECT count(*) as n
       FROM ({db_source})
@@ -177,7 +183,36 @@ generate_gbif_log <- function(
 
   run_and_log(
     con = con,
-    title = "Sommaire basisOfRecord:",
+    title = "Compte de Species non-null ou non-NA:",
+    sql_query = glue::glue(
+      "SELECT count(species) as n
+      FROM ({db_source});"
+    )
+  )
+
+  run_and_log(
+    con = con,
+    title = "Compte rangées avec filtres : 
+    taxonRank == SPECIES, SUBSPECIES VARIETY, 
+    kingdom == Chromista, Fungi, Plantae, Animalia, 
+    coordinateUncertaintyInMeters (<= 200) ou NULL:",
+    sql_query = glue::glue(
+      "SELECT count(*) as n
+      FROM ({db_source})
+      WHERE
+      taxonRank IN ('SPECIES', 'SUBSPECIES', 'VARIETY')
+      AND
+      kingdom IN ('Chromista', 'Fungi', 'Plantae', 'Animalia')
+      AND
+      (coordinateUncertaintyInMeters <= 200
+      OR
+      coordinateUncertaintyInMeters IS NULL);"
+    )
+  )
+
+  run_and_log(
+    con = con,
+    title = "Sommaire du compte par basisOfRecord :",
     sql_query = glue::glue(
       "SELECT basisOfRecord, count(basisOfRecord) as n
        FROM ({db_source})
@@ -185,10 +220,20 @@ generate_gbif_log <- function(
     )
   )
 
-  # CORRECTION : L'appel original manquait l'argument 'con' ici
   run_and_log(
     con = con,
-    title = "Sommaire taxonRank:",
+    title = "Sommaire du compte par kingdom:",
+    sql_query = glue::glue(
+      "SELECT kingdom, count(kingdom) as n
+      FROM ({db_source})
+      GROUP BY all
+      ORDER BY n DESC;"
+    )
+  )
+
+  run_and_log(
+    con = con,
+    title = "Sommaire du compte par taxonRank:",
     sql_query = glue::glue(
       "
       SELECT taxonRank, count(taxonRank) as n
@@ -199,38 +244,12 @@ generate_gbif_log <- function(
 
   run_and_log(
     con = con,
-    title = "Sommaire kingdom:",
+    title = "Sommaire du compte par taxonRank:",
     sql_query = glue::glue(
-      "SELECT kingdom, count(kingdom) as n
-       FROM ({db_source})
-       GROUP BY all
-       ORDER BY n DESC;"
-    )
-  )
-
-  run_and_log(
-    con = con,
-    title = "Compte de Species non-null ou non-NA:",
-    sql_query = glue::glue(
-      "SELECT count(species) as n
-       FROM ({db_source});"
-    )
-  )
-
-  run_and_log(
-    con = con,
-    title = "Filtres taxonRank, kingdom, coordinateUncertaintyInMeters (<= 200):",
-    sql_query = glue::glue(
-      "SELECT count(*) as n
-       FROM ({db_source})
-       WHERE
-         taxonRank IN ('SPECIES', 'SUBSPECIES', 'VARIETY')
-         AND
-         kingdom IN ('Chromista', 'Fungi', 'Plantae', 'Animalia')
-         AND
-         (coordinateUncertaintyInMeters <= 200
-         OR
-         coordinateUncertaintyInMeters IS NULL);"
+      "
+      SELECT , count(taxonRank) as n
+      FROM ({db_source})
+      GROUP BY all ORDER BY n DESC;"
     )
   )
 
