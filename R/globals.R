@@ -16,9 +16,15 @@ utils::globalVariables(
   names = c(
     "lexicon",
     # Données GBIF
-    "species", "basisOfRecord",
-    "countryCode", "stateProvince",
-    "taxonRank", "kingdom",
-    "coordinateUncertaintyInMeters", "geometry"
+    "species",
+    "basisOfRecord",
+    "countryCode",
+    "stateProvince",
+    "taxonRank",
+    "kingdom",
+    "occurrenceStatus",
+    "year",
+    "coordinateUncertaintyInMeters",
+    "geometry"
   )
 )

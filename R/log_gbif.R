@@ -60,6 +60,7 @@ run_and_log <- function(con = NULL, title, sql_query) {
 #'   connexion temporaire est initialisée via [setup_duckdb()].
 #' @param path_in Chemin d'accès (Character) vers le fichier Parquet.
 #' @param path_log Chaîne de caractères. Chemin d'accès et nom du fichier de sortie (ex: `summary.log`).
+#' @param notes Chaîne de caractères pour ajouter des informations supplémentaire.
 #'
 #' @return Chaîne de caractères (`character`) contenant le chemin du fichier log, de manière invisible.
 #' @export
@@ -140,6 +141,30 @@ generate_gbif_log <- function(
     title = "Total des rangées `count()` dans le fichier :",
     sql_query = glue::glue(
       "SELECT count(*) as n
+      FROM ({db_source});"
+    )
+  )
+
+  run_and_log(
+    con = con,
+    title = "Plage des années des données brutes :",
+    sql_query = glue::glue(
+      "SELECT 
+    MIN(year) AS min_year,
+    MAX(year) AS max_year
+      FROM ({db_source});"
+    )
+  )
+
+  run_and_log(
+    con = con,
+    title = "Étendue des données spatiales :",
+    sql_query = glue::glue(
+      "SELECT 
+    MIN(ST_XMin(geometry)) AS xmin,
+    MAX(ST_XMax(geometry)) AS xmax,
+    MIN(ST_YMin(geometry)) AS ymin,
+    MAX(ST_YMax(geometry)) AS ymax
       FROM ({db_source});"
     )
   )

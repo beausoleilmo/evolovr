@@ -136,33 +136,63 @@ prep_h3_admin <- function(
       )
     )
 
-  # Préparation de la table région admin en trouvant les IDs des polygones
-  # H3 cells (Résolution XX)
-  admin_h3_indexed <- admin_qc_tbl |>
+  # # Préparation de la table région admin en trouvant les IDs des polygones
+  # # H3 cells (Résolution XX)
+  # admin_h3_indexed <- admin_qc_tbl |>
+  #   dplyr::mutate(
+  #     # Création d'une 'liste' de cells (liste d'hexagones couvrant le polygone)
+  #     # cells = h3_polygon_wkt_to_cells(ST_AsText("geom"), as.integer(res))
+  #     cells_list = dbplyr::sql(
+  #       glue::glue_sql(
+  #         "h3_polygon_wkt_to_cells(ST_AsText({`geom_col_name`}), {as.integer(res)})",
+  #         .con = con
+  #       )
+  #     )
+  #   ) |>
+  #   # Utilisation d'une subquery/transmute pour faire une opération (un peu
+  #   # comme mutate), mais qui ne garde que les colonnes désirées. Avec unnest
+  #   # DuckDB's unnest() on prend les listes d'hexagone et on les reporte sur des
+  #   # nouvelles lignes. Donc chaque MUS_NM_* se retrouve avec 1 ID de
+  #   # la grille H3
+  #   dplyr::mutate(
+  #     h3_cell = dbplyr::sql("unnest(cells_list)"),
+  #     # Garde colonnes d'indicateur de région (pour la jointure basée sur H3)
+  #     dplyr::across(
+  #       dplyr::all_of(colsAdmin)
+  #     ),
+  #     # Comportement similaire à 'Transmute'
+  #     .keep = "none"
+  #   )
+
+  # 1. Build the subquery that generates the H3 arrays
+  subquery_tbl <- admin_qc_tbl |>
     dplyr::mutate(
-      # Création d'une 'liste' de cells (liste d'hexagones couvrant le polygone)
-      # cells = h3_polygon_wkt_to_cells(ST_AsText("geom"), as.integer(res))
-      cells = dbplyr::sql(
+      cells_list = dbplyr::sql(
         glue::glue_sql(
-          "h3_polygon_wkt_to_cells(ST_AsText({`geom_col_name`}), {as.integer(res)})",
+          "h3_polygon_wkt_to_cells_string(ST_AsText({`geom_col_name`}), {as.integer(res)})",
           .con = con
         )
       )
-    ) |>
-    # Utilisation d'une subquery/transmute pour faire une opération (un peu
-    # comme mutate), mais qui ne garde que les colonnes désirées. Avec unnest
-    # DuckDB's unnest() on prend les listes d'hexagone et on les reporte sur des
-    # nouvelles lignes. Donc chaque MUS_NM_* se retrouve avec 1 ID de
-    # la grille H3
-    dplyr::mutate(
-      h3_cell = dbplyr::sql("unnest(cells)"),
-      # Garde colonnes d'indicateur de région (pour la jointure basée sur H3)
-      dplyr::across(
-        dplyr::all_of(colsAdmin)
-      ),
-      # Comportement similaire à 'Transmute'
-      .keep = "none"
     )
+
+  # 2. Format your columns for the SQL SELECT string
+  cols_str <- paste(
+    DBI::dbQuoteIdentifier(con, colsAdmin),
+    collapse = ", "
+  )
+
+  # 3. Use DuckDB to unnest the list by passing the query explicitly
+  admin_h3_indexed <- dplyr::tbl(
+    con,
+    dbplyr::sql(
+      glue::glue(
+        "SELECT 
+         {cols_str}, 
+         unnest(cells_list) AS h3_cell 
+       FROM ({dbplyr::remote_query(subquery_tbl)})"
+      )
+    )
+  )
 
   # Requête SQL
   raw_dbplyr_query <- DBI::SQL(

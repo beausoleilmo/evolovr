@@ -4,7 +4,12 @@
 \alias{generate_gbif_log}
 \title{Générer un fichier sommaire de statistiques sur les données GBIF}
 \usage{
-generate_gbif_log(con = NULL, path_in, path_log = "gb_file_summary.log")
+generate_gbif_log(
+  con = NULL,
+  path_in,
+  path_log = "gb_file_summary.log",
+  notes = ""
+)
 }
 \arguments{
 \item{con}{Connexion DuckDB (duckdb_connection) valide (`DBIConnection`). Si `NULL`, une
@@ -13,6 +18,8 @@ connexion temporaire est initialisée via [setup_duckdb()].}
 \item{path_in}{Chemin d'accès (Character) vers le fichier Parquet.}
 
 \item{path_log}{Chaîne de caractères. Chemin d'accès et nom du fichier de sortie (ex: `summary.log`).}
+
+\item{notes}{Chaîne de caractères pour ajouter des informations supplémentaire.}
 }
 \value{
 Chaîne de caractères (`character`) contenant le chemin du fichier log, de manière invisible.

@@ -10,9 +10,13 @@ join_gbif_admin(
   config,
   res = 10L,
   basisRec = c("HUMAN_OBSERVATION", "MACHINE_OBSERVATION"),
+  occStat = c("PRESENT"),
   taxRank = c("SPECIES", "SUBSPECIES", "VARIETY"),
   kingdm = c("Chromista", "Fungi", "Plantae", "Animalia"),
-  coordUncertainM = 200
+  coordUncertainM = 200,
+  min_annee = 1200,
+  max_annee = NULL,
+  colsAdmin = c("MUS_NM_MUN", "MUS_NM_MRC", "MUS_NM_REG")
 )
 }
 \arguments{
@@ -32,11 +36,22 @@ H3 à une résolution.
 
 \item{basisRec}{Vecteur avec basisOfRecord}
 
+\item{occStat}{Vecteur avec occurrenceStatus}
+
 \item{taxRank}{Vecteur avec taxonRank}
 
 \item{kingdm}{Vecteur avec kingdom}
 
 \item{coordUncertainM}{Vecteur avec coordinateUncertaintyInMeters}
+
+\item{min_annee}{Année (numeric) minimale pour filtrer les observations,
+colonne 'year', (défaut = 1200). Garde les années 'NA'.}
+
+\item{max_annee}{Année (numeric) maximale pour filtrer les observations,
+colonne 'year' (défaut = NULL, prend année courante). Garde les années 'NA'.}
+
+\item{colsAdmin}{Nom des colonnes (character) à prendre dans la table
+de données administratives pour faire la jointure spatiale.}
 }
 \value{
 NULL. La fonction exporte directement le

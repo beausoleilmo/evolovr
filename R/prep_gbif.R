@@ -22,6 +22,12 @@
 #' @param taxRank Vecteur avec taxonRank
 #' @param kingdm Vecteur avec kingdom
 #' @param coordUncertainM Vecteur avec coordinateUncertaintyInMeters
+#' @param min_annee Année (numeric) minimale pour filtrer les observations,
+#' colonne 'year', (défaut = 1200). Garde les années 'NA'.
+#' @param max_annee Année (numeric) maximale pour filtrer les observations,
+#' colonne 'year' (défaut = NULL, prend année courante). Garde les années 'NA'.
+#' @param colsAdmin Nom des colonnes (character) à prendre dans la table
+#' de données administratives pour faire la jointure spatiale.
 #'
 #' @details
 #' L'identifiant H3 retourné est un entier DuckDB de type `uint64`.
@@ -39,6 +45,7 @@
 #' @importFrom tictoc tic toc
 #' @importFrom cli cli_abort cli_alert_info cli_alert_success
 #'   cli_progress_message
+#' @importFrom lubridate year
 #'
 #' @export
 #'
@@ -60,7 +67,14 @@ join_gbif_admin <- function(
   occStat = c("PRESENT"),
   taxRank = c("SPECIES", "SUBSPECIES", "VARIETY"),
   kingdm = c("Chromista", "Fungi", "Plantae", "Animalia"),
-  coordUncertainM = 200
+  coordUncertainM = 200,
+  min_annee = 1200,
+  max_annee = NULL,
+  colsAdmin = c(
+    "MUS_NM_MUN",
+    "MUS_NM_MRC",
+    "MUS_NM_REG"
+  )
 ) {
   # Gestion de la connexion
   is_local_con <- is.null(con)
@@ -133,6 +147,11 @@ join_gbif_admin <- function(
     )
   )
 
+  # Extraire l'année courante
+  if (is.null(max_annee)) {
+    max_annee <- lubridate::year(Sys.Date())
+  }
+
   # Pipeline de transformation et filtration des données GBIF
   message("Pipeline de transformation")
   # options
@@ -154,6 +173,11 @@ join_gbif_admin <- function(
       # Filtre taxonomique
       taxonRank %in% taxRank,
       kingdom %in% kingdm,
+      # Sélection années
+      (year >= min_annee &
+        year <= max_annee) |
+        # Garde les années NA
+        is.na(year),
       # Filtre géographique
       coordinateUncertaintyInMeters <= coordUncertainM |
         is.na(coordinateUncertaintyInMeters)
@@ -173,38 +197,74 @@ join_gbif_admin <- function(
   # Spatial join to keep only points inside municipality polygons
   #
 
-  colsAdmin <- c(
-    "MUS_NM_MUN",
-    "MUS_NM_MRC",
-    "MUS_NM_REG"
-  )
-
   # Préparer pour SELECT de colonnes dans SQL
   cols_sql <- paste(colsAdmin, collapse = ", ")
+
+  message("Préparation de table de données GBIF avec filtre")
+  dbExecute(
+    con,
+    paste0(
+      "
+  CREATE TEMP TABLE g_indexed AS 
+  SELECT *, ST_Envelope(geometry) AS bbox 
+  FROM (",
+      dbplyr::remote_query(pipeline_filt),
+      ");
+"
+    )
+  )
+
+  message("Table temporaire avec données administrative")
+  dbExecute(
+    con,
+    glue::glue(
+      "
+  CREATE TEMP TABLE q_indexed AS 
+  SELECT 
+    {cols_sql}, 
+    ST_Transform(geom, 'EPSG:4269', 'OGC:CRS84') AS geom,
+    ST_Envelope(ST_Transform(geom, 'EPSG:4269', 'OGC:CRS84')) AS bbox_admin
+  FROM read_parquet('{config$out_admin_pq}');
+"
+    )
+  )
+
+  pipeline <- glue::glue(
+    "
+  SELECT 
+    g.*, 
+    q.{cols_sql}
+FROM g_indexed AS g
+  INNER JOIN q_indexed AS q
+    ON ST_Intersects(g.geometry, q.geom)
+"
+  )
+
+  # result <- dbGetQuery(con, query)
 
   # NOTE : jointure (inner join) des données admin
   # filtre les données spatialement tout en ajoutant le nom des colonnes
   # administratives.
-  pipeline <- dplyr::tbl(
-    src = con,
-    from = dbplyr::sql(
-      glue::glue(
-        "
-      SELECT 
-        g.*, 
-        {cols_sql}
-      FROM ({dbplyr::remote_query(pipeline_filt)}) AS g
-      INNER JOIN (
-        SELECT 
-          {cols_sql}, 
-          ST_MakeValid(ST_Transform(geometry, 'EPSG:4269', 'EPSG:4326')) AS geom_admin
-        FROM read_parquet('{config$out_admin_pq}')
-      ) AS q
-      ON ST_Intersects(g.geometry, q.geom_admin)
-    "
-      )
-    )
-  )
+  # pipeline <- dplyr::tbl(
+  #   src = con,
+  #   from = dbplyr::sql(
+  #     glue::glue(
+  #       "
+  #     SELECT
+  #       g.*,
+  #       {cols_sql}
+  #     FROM ({dbplyr::remote_query(pipeline_filt)}) AS g
+  #     INNER JOIN (
+  #       SELECT
+  #         {cols_sql},
+  #         ST_MakeValid(ST_Transform(geometry, 'EPSG:4269', 'EPSG:4326')) AS geom_admin
+  #       FROM read_parquet('{config$out_admin_pq}')
+  #     ) AS q
+  #     ON ST_Intersects(g.geometry, q.geom_admin)
+  #   "
+  #     )
+  #   )
+  # )
   # Ajout de l'information administrative
   # --> trouver l'intersection entre X et Y
   # dplyr::inner_join(
@@ -213,11 +273,11 @@ join_gbif_admin <- function(
   # )
 
   # Préparation de la requête d'exportation native
-  query_raw <- dbplyr::remote_query(pipeline)
+  # query_raw <- dbplyr::remote_query(pipeline)
 
   export_sql <- glue::glue(
     "COPY (
-    {query_raw}
+    {pipeline}
     )
     TO '{config$out_gbif_pq}' (
     FORMAT parquet,
@@ -228,7 +288,7 @@ join_gbif_admin <- function(
 
   # Exécution et Chronométrage
   cli::cli_alert_info(
-    "Exécution de la jointure H3 et exportation vers Parquet"
+    "Exécute la jointure H3 et exporte vers Parquet"
   )
   # p <- cli::cli_progress_message(
   #   msg = "Exécution de la jointure H3 et exportation vers Parquet\n"
@@ -237,7 +297,7 @@ join_gbif_admin <- function(
   # prendre le contrôle de ce qui s'affiche dans la console
   # DBI::dbExecute(con, "SET enable_progress_bar = false;")
 
-  tictoc::tic("Exécution pipeline de filtre, H3 et jointure admin-H3")
+  tictoc::tic("Exécution pipeline de filtre, H3 et jointure admin")
   DBI::dbExecute(con, export_sql)
   tictoc::toc()
 
