@@ -48,26 +48,35 @@ build_ckan_resource_url <- function(
 #' @param api_url A single non-empty character string pointing to a CKAN
 #'   `resource_show` URL (for example, produced by [build_ckan_resource_url()]).
 #' @param out_dir A single non-empty character string specifying the output
-#'   directory. Defaults to a temporary directory created with
-#'   [base::tempfile()].
+#'   directory for the downloaded file. Defaults to a temporary directory created
+#'   with [base::tempfile()].
 #' @param unzip A single logical (`TRUE` or `FALSE`) indicating whether `.zip`
-#'   archives should be extracted into `out_dir`. Defaults to `TRUE`.
+#'   archives should be extracted. Defaults to `TRUE`.
+#' @param extract_dir Optional single non-empty character string specifying where
+#'   `.zip` archives are extracted. Defaults to a temporary directory via
+#'   [base::tempfile()] when `unzip = TRUE`, or `NULL` when `unzip = FALSE`.
 #' @param user_agent A single non-empty character string sent as the HTTP
 #'   `User-Agent` header. Defaults to `"R-donneesquebec-client"`.
 #'
 #' @return A list (invisibly) containing:
 #'   * `out_dir`: Path to the output directory.
 #'   * `file_path`: Path to the downloaded file.
+#'   * `extract_dir`: Path to the extraction directory (or `NULL` if not unzipped).
 #'   * `extracted_files`: Character vector of extracted file paths (empty if not
 #'     unzipped or not a `.zip` file).
 #'   * `metadata`: Parsed CKAN resource metadata list.
 #'
 #' @examples
 #' \dontrun{
-#' # TODO :
 #' api_url <- build_ckan_resource_url("3448b141-f236-4c1b-add8-fe59109ac4f7")
-#' res <- download_ckan_resource(api_url)
-#' res$file_path
+#' res <- download_ckan_resource(api_url, out_dir = "data/raw")
+#' if (!is.null(res$extract_dir) && !identical(res$extract_dir, res$out_dir)) {
+#'   on.exit(
+#'     unlink(res$extract_dir, recursive = TRUE, force = TRUE),
+#'     add = TRUE
+#'   )
+#' }
+#' res$extracted_files
 #' }
 #'
 #' @export
@@ -76,12 +85,16 @@ download_ckan_resource <- function(
   api_url,
   out_dir = tempfile("dq_admin_"),
   unzip = TRUE,
+  extract_dir = if (isTRUE(unzip)) tempfile("dq_extract_") else NULL,
   user_agent = "R-donneesquebec-client"
 ) {
   assert_non_empty_string(api_url, "api_url")
   assert_non_empty_string(out_dir, "out_dir")
   assert_non_empty_string(user_agent, "user_agent")
   assert_flag(unzip, "unzip")
+  if (!is.null(extract_dir)) {
+    assert_non_empty_string(extract_dir, "extract_dir")
+  }
 
   meta <- perform_ckan_get(api_url = api_url, user_agent = user_agent)
 
@@ -104,8 +117,9 @@ download_ckan_resource <- function(
 
   resource_label <- res_info$name %||% "unnamed resource"
   resource_fmt <- res_info$format %||% "unknown format"
-  cli::cli_inform("Fetching resource: {resource_label} ({resource_fmt}).")
+  cli::cli_inform("Fetching resource:\n{resource_label} ({resource_fmt}).")
 
+  tictoc::tic("Download time: ")
   # Create output directory if it doesn't exist yet (works for temp and user folders)
   dir_created <- dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
   if (!dir_created && !dir.exists(out_dir)) {
@@ -122,15 +136,32 @@ download_ckan_resource <- function(
     user_agent = user_agent,
     path = archive_path
   )
+  tictoc::toc()
 
   extracted_files <- character(0)
+  used_extract_dir <- NULL
+
   if (isTRUE(unzip) && grepl("\\.zip$", archive_path, ignore.case = TRUE)) {
-    extracted_files <- utils::unzip(archive_path, exdir = out_dir)
+    used_extract_dir <- extract_dir %||% tempfile("dq_extract_")
+
+    ext_created <- dir.create(
+      used_extract_dir,
+      recursive = TRUE,
+      showWarnings = FALSE
+    )
+    if (!ext_created && !dir.exists(used_extract_dir)) {
+      cli::cli_abort(
+        "Could not create extraction directory at {.path {used_extract_dir}}."
+      )
+    }
+
+    extracted_files <- utils::unzip(archive_path, exdir = used_extract_dir)
   }
 
   invisible(list(
     out_dir = out_dir,
     file_path = archive_path,
+    extract_dir = used_extract_dir,
     extracted_files = extracted_files,
     metadata = res_info
   ))

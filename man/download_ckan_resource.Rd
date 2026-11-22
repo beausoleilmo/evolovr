@@ -8,6 +8,7 @@ download_ckan_resource(
   api_url,
   out_dir = tempfile("dq_admin_"),
   unzip = TRUE,
+  extract_dir = if (isTRUE(unzip)) tempfile("dq_extract_") else NULL,
   user_agent = "R-donneesquebec-client"
 )
 }
@@ -16,11 +17,15 @@ download_ckan_resource(
 \code{resource_show} URL (for example, produced by \code{\link[=build_ckan_resource_url]{build_ckan_resource_url()}}).}
 
 \item{out_dir}{A single non-empty character string specifying the output
-directory. Defaults to a temporary directory created with
-\code{\link[base:tempfile]{base::tempfile()}}.}
+directory for the downloaded file. Defaults to a temporary directory created
+with \code{\link[base:tempfile]{base::tempfile()}}.}
 
 \item{unzip}{A single logical (\code{TRUE} or \code{FALSE}) indicating whether \code{.zip}
-archives should be extracted into \code{out_dir}. Defaults to \code{TRUE}.}
+archives should be extracted. Defaults to \code{TRUE}.}
+
+\item{extract_dir}{Optional single non-empty character string specifying where
+\code{.zip} archives are extracted. Defaults to a temporary directory via
+\code{\link[base:tempfile]{base::tempfile()}} when \code{unzip = TRUE}, or \code{NULL} when \code{unzip = FALSE}.}
 
 \item{user_agent}{A single non-empty character string sent as the HTTP
 \code{User-Agent} header. Defaults to \code{"R-donneesquebec-client"}.}
@@ -30,6 +35,7 @@ A list (invisibly) containing:
 \itemize{
 \item \code{out_dir}: Path to the output directory.
 \item \code{file_path}: Path to the downloaded file.
+\item \code{extract_dir}: Path to the extraction directory (or \code{NULL} if not unzipped).
 \item \code{extracted_files}: Character vector of extracted file paths (empty if not
 unzipped or not a \code{.zip} file).
 \item \code{metadata}: Parsed CKAN resource metadata list.
@@ -42,10 +48,15 @@ archives.
 }
 \examples{
 \dontrun{
-# Découpages administratifs 1/20 000 (format GPKG) (GPKG)
 api_url <- build_ckan_resource_url("3448b141-f236-4c1b-add8-fe59109ac4f7")
-res <- download_ckan_resource(api_url)
-res$file_path
+res <- download_ckan_resource(api_url, out_dir = "data/raw")
+if (!is.null(res$extract_dir) && !identical(res$extract_dir, res$out_dir)) {
+  on.exit(
+    unlink(res$extract_dir, recursive = TRUE, force = TRUE),
+    add = TRUE
+  )
+}
+res$extracted_files
 }
 
 }
